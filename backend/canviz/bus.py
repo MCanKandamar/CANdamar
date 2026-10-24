@@ -193,7 +193,14 @@ class BusManager:
             # Give OS time to release the USB handle before any potential reopen
             await asyncio.sleep(1.5)
 
-    async def send(self, arbitration_id: int, data: list[int], is_extended_id: bool = False) -> None:
+    async def send(
+        self,
+        arbitration_id: int,
+        data: list[int],
+        is_extended_id: bool = False,
+        is_remote_frame: bool = False,
+        dlc: Optional[int] = None,
+    ) -> None:
         if not self._connected or self._bus is None:
             raise RuntimeError("Not connected — call /connect first")
         if self._listen_only:
@@ -201,11 +208,20 @@ class BusManager:
                 "Listen-only mode: the adapter does not transmit. "
                 "Reconnect in normal mode to send frames."
             )
-        msg = can.Message(
-            arbitration_id=arbitration_id,
-            data=bytes(data),
-            is_extended_id=is_extended_id,
-        )
+        if is_remote_frame:
+            # RTR: no payload, the DLC tells the other node how much to send
+            msg = can.Message(
+                arbitration_id=arbitration_id,
+                is_extended_id=is_extended_id,
+                is_remote_frame=True,
+                dlc=dlc or 0,
+            )
+        else:
+            msg = can.Message(
+                arbitration_id=arbitration_id,
+                data=bytes(data),
+                is_extended_id=is_extended_id,
+            )
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, self._bus.send, msg)
 

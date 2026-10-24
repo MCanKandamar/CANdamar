@@ -107,22 +107,26 @@ class WSBroadcaster:
         if _THROTTLE_QUEUE_DEPTH and self._queue.qsize() >= _THROTTLE_QUEUE_DEPTH:
             return
 
-        # DBC signal decode
-        signals = dbc_store.decode(msg.arbitration_id, bytes(msg.data))
+        # Remote (RTR) frames carry no payload -- nothing for the decoders to read
+        if msg.is_remote_frame:
+            signals, j1939_info, canopen_info = [], None, None
+        else:
+            # DBC signal decode
+            signals = dbc_store.decode(msg.arbitration_id, bytes(msg.data))
 
-        # J1939 decode - runs on extended-ID frames; returns None for 11-bit frames
-        j1939_info = j1939_store.process_frame(
-            arb_id=msg.arbitration_id,
-            data=bytes(msg.data),
-            is_extended=msg.is_extended_id,
-        )
+            # J1939 decode - runs on extended-ID frames; returns None for 11-bit frames
+            j1939_info = j1939_store.process_frame(
+                arb_id=msg.arbitration_id,
+                data=bytes(msg.data),
+                is_extended=msg.is_extended_id,
+            )
 
-        # CANopen decode - runs on 11-bit frames; returns None for extended-ID frames
-        canopen_info = canopen_store.process_frame(
-            arb_id=msg.arbitration_id,
-            data=bytes(msg.data),
-            is_extended=msg.is_extended_id,
-        )
+            # CANopen decode - runs on 11-bit frames; returns None for extended-ID frames
+            canopen_info = canopen_store.process_frame(
+                arb_id=msg.arbitration_id,
+                data=bytes(msg.data),
+                is_extended=msg.is_extended_id,
+            )
 
         frame: dict = {
             "type":           "frame",
@@ -131,6 +135,7 @@ class WSBroadcaster:
             "data":           list(msg.data),
             "timestamp":      round(msg.timestamp, 6),
             "is_extended_id": msg.is_extended_id,
+            "is_remote_frame": msg.is_remote_frame,
             "is_fd":          msg.is_fd,
             "channel":        0,
             "signals":        signals,

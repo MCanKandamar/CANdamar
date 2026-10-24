@@ -96,6 +96,7 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
       rate,
       lastSeen:       nowMs,
       isExtended:     frame.is_extended_id,
+      isRemote:       frame.is_remote_frame ?? false,
       isFd:           frame.is_fd,
       flashKey:       nowMs,
       decodedSignals: signals,

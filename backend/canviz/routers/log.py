@@ -93,9 +93,13 @@ class LogSession:
                 ext  = "1" if msg.is_extended_id else "0"
 
                 # ASC line:  timestamp  channel  id  dir  dlc  data
-                await asc_f.write(
-                    f"   {ts:.6f} 1  {id_s}  Rx   d {msg.dlc}  {data}\n"
-                )
+                # Remote frames use 'r' instead of 'd' and carry no data
+                if msg.is_remote_frame:
+                    await asc_f.write(f"   {ts:.6f} 1  {id_s}  Rx   r {msg.dlc}\n")
+                else:
+                    await asc_f.write(
+                        f"   {ts:.6f} 1  {id_s}  Rx   d {msg.dlc}  {data}\n"
+                    )
                 # CSV line
                 await csv_f.write(
                     f"{ts},{id_s},{msg.dlc},{data.replace(' ', '')},{ext}\n"

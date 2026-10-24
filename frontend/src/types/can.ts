@@ -83,6 +83,7 @@ export interface CanFrame {
   data: number[];
   timestamp: number;        // Unix epoch float (seconds)
   is_extended_id: boolean;
+  is_remote_frame?: boolean;  // RTR: no data, dlc is the requested length
   is_fd: boolean;
   // Backend key is "signals"; frameStore normalises to decoded_signals
   signals?: DecodedSignal[];
@@ -109,6 +110,7 @@ export interface FrameRow {
   rate: number;             // frames per second (rolling 1s window)
   lastSeen: number;         // Date.now() ms
   isExtended: boolean;
+  isRemote?: boolean;
   isFd: boolean;
   flashKey: number;         // bumped on every update, triggers flash
   decodedSignals?: DecodedSignal[];

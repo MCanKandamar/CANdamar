@@ -43,6 +43,7 @@ export function SendFramePanel() {
         <span>DLC</span>
         <span>Data (hex)</span>
         <span />
+        <span />
         <span>Interval</span>
         <span />
       </div>
@@ -82,11 +83,12 @@ export function SendFramePanel() {
               {DLC_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
 
-            {/* Data */}
+            {/* Data -- unused for remote frames */}
             <input
-              style={{ ...inp, letterSpacing: '0.04em' }}
-              value={f.data}
-              placeholder="FF 00 3C ..."
+              style={{ ...inp, letterSpacing: '0.04em', opacity: f.isRemote ? 0.4 : 1 }}
+              value={f.isRemote ? '' : f.data}
+              placeholder={f.isRemote ? 'remote request: no data' : 'FF 00 3C ...'}
+              disabled={f.isRemote}
               onChange={(e) => updateFrame(f.id, { data: e.target.value })}
             />
 
@@ -108,6 +110,27 @@ export function SendFramePanel() {
                 userSelect: 'none',
               }}>
                 29-bit
+              </span>
+            </div>
+
+            {/* Remote frame (RTR) toggle */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <input
+                type="checkbox"
+                checked={f.isRemote}
+                onChange={(e) => updateFrame(f.id, { isRemote: e.target.checked })}
+                title="Remote transmission request (RTR) - no data; DLC is the length requested from the other node."
+                style={{ cursor: 'pointer', accentColor: 'var(--accent-amber)', margin: 0 }}
+              />
+              <span style={{
+                fontSize: 8,
+                fontFamily: 'var(--font-mono)',
+                color: f.isRemote ? 'var(--accent-amber)' : 'var(--text-muted)',
+                letterSpacing: '0.02em',
+                lineHeight: 1,
+                userSelect: 'none',
+              }}>
+                RTR
               </span>
             </div>
 
@@ -202,7 +225,7 @@ export function SendFramePanel() {
 }
 
 const gridStyle = {
-  gridTemplateColumns: '72px 44px 1fr 28px 110px auto',
+  gridTemplateColumns: '72px 44px 1fr 28px 28px 110px auto',
   gap: 5,
 };
 

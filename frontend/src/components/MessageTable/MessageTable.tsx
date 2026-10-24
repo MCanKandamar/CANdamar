@@ -89,7 +89,12 @@ const BASE_COLUMNS: ColumnDef<FrameRow>[] = [
     accessorKey: 'dataHex',
     header: 'Data',
     size: 220,
-    cell: (info) => (
+    cell: (info) => info.row.original.isRemote ? (
+      // Remote (RTR) frame: no payload, the DLC is the requested length
+      <span className="mono" style={{ ...styles.dataCell, color: 'var(--text-muted)' }}>
+        remote request
+      </span>
+    ) : (
       <span className="mono" style={styles.dataCell}>
         {info.getValue<string>()}
       </span>
@@ -523,6 +528,9 @@ export function MessageTable() {
                     {/* EXT badge: only for extended-ID frames that are not J1939 or CANopen */}
                     {frame.isExtended && !frame.j1939 && !frame.canopen && (
                       <span className="badge badge-muted">EXT</span>
+                    )}
+                    {frame.isRemote && (
+                      <span className="badge badge-amber" title="Remote transmission request">RTR</span>
                     )}
                     {frame.isFd && <span className="badge badge-blue">FD</span>}
                     {showDecoded && frame.decodedSignals?.length ? (

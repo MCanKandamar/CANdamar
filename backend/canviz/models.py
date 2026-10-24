@@ -17,6 +17,7 @@ class CANFrame(BaseModel):
     data: list[int]                # Raw bytes as ints
     timestamp: float               # Seconds since bus open
     is_extended_id: bool = False
+    is_remote_frame: bool = False  # RTR frame -- data is empty, dlc is the requested length
     is_fd: bool = False            # True for CAN FD frames (Phase 4)
     channel: int = 0
     signals: dict[str, float] = {}  # Populated if a DBC is loaded
@@ -47,8 +48,10 @@ class ConnectRequest(BaseModel):
 
 class SendFrameRequest(BaseModel):
     id: int                        # Arbitration ID as integer
-    data: list[int]                # Up to 8 bytes
+    data: list[int] = []           # Up to 8 bytes (ignored for remote frames)
     is_extended_id: bool = False
+    is_remote_frame: bool = False  # RTR: request data from another node
+    dlc: Optional[int] = None      # Requested length for remote frames (0-8)
 
 
 class DBCInfo(BaseModel):

@@ -36,6 +36,17 @@ async def send_frame(req: SendFrameRequest):
         raise HTTPException(status_code=400, detail="Not connected. Call /connect first.")
     if len(req.data) > 8:
         raise HTTPException(status_code=400, detail="CAN 2.0 data max 8 bytes.")
+    if req.is_remote_frame:
+        # A remote frame carries no data -- only the DLC of the requested frame
+        dlc = req.dlc if req.dlc is not None else 0
+        if not 0 <= dlc <= 8:
+            raise HTTPException(status_code=400, detail="Remote frame DLC must be 0-8.")
+        try:
+            await bus_manager.send(req.id, [], req.is_extended_id, is_remote_frame=True, dlc=dlc)
+            stats.on_tx(0)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        return {"ok": True, "id": hex(req.id), "rtr": True, "dlc": dlc}
     try:
         await bus_manager.send(req.id, req.data, req.is_extended_id)
         stats.on_tx(len(req.data))

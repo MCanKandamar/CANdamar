@@ -13,6 +13,7 @@ export interface TransmitFrame {
   dlc:        number;
   data:       string;   // "FF 00 3C ..."
   isExtended: boolean;
+  isRemote:   boolean;  // RTR frame: no data, DLC = requested length
   intervalMs: number;   // 0 = manual only
   isRunning:  boolean;
   lastSent:   string | null;
@@ -23,7 +24,7 @@ function makeFrame(): TransmitFrame {
   return {
     id: uid(), canId: '0x123', dlc: 8,
     data: '00 00 00 00 00 00 00 00',
-    isExtended: false, intervalMs: 100,
+    isExtended: false, isRemote: false, intervalMs: 100,
     isRunning: false, lastSent: null, error: null,
   };
 }
@@ -48,6 +49,10 @@ function parseBytes(s: string): number[] | null {
 async function doSend(f: TransmitFrame): Promise<string> {
   const id = parseId(f.canId);
   if (id === null) throw new Error('Invalid CAN ID');
+  if (f.isRemote) {
+    await apiSendFrame({ id, dlc: f.dlc, data: [], is_extended_id: f.isExtended, is_remote_frame: true });
+    return `${f.isExtended ? '[EXT]' : '[STD]'} 0x${id.toString(16).toUpperCase()} [${f.dlc}] RTR`;
+  }
   const data = parseBytes(f.data);
   if (data === null) throw new Error('Invalid data bytes');
   while (data.length < f.dlc) data.push(0);

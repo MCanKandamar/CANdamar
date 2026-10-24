@@ -76,6 +76,7 @@ export interface SendFramePayload {
   dlc: number;
   data: number[];
   is_extended_id: boolean;
+  is_remote_frame?: boolean;   // RTR: data is ignored, dlc is the requested length
 }
 
 export function apiSendFrame(payload: SendFramePayload) {

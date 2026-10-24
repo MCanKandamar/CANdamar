@@ -52,6 +52,21 @@ export function apiGetStatus() {
   return request<ApiStatus>('/status');
 }
 
+export interface SerialPortInfo {
+  device: string;               // e.g. "COM15" or "/dev/ttyACM0"
+  description: string;
+  manufacturer: string | null;
+  vid: string | null;           // USB vendor ID, hex
+  pid: string | null;           // USB product ID, hex
+  serial_number: string | null;
+  usb: boolean;
+  adapter: string | null;       // set when VID:PID matches a known slcan adapter
+}
+
+export function apiListPorts() {
+  return request<{ ports: SerialPortInfo[]; error?: string }>('/ports');
+}
+
 // ============================================================
 // Send frame
 // ============================================================

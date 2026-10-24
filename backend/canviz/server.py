@@ -18,6 +18,7 @@ from canviz.static_serving import mount_frontend
 from canviz.routers import stats as stats_router
 from canviz.routers.j1939 import router as j1939_router
 from canviz.routers.canopen import router as canopen_router
+from canviz.routers.ports import router as ports_router
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -83,6 +84,7 @@ app.include_router(log.router)
 app.include_router(stats_router.router)
 app.include_router(j1939_router)
 app.include_router(canopen_router)
+app.include_router(ports_router)
 app.include_router(replay_router)
 
 

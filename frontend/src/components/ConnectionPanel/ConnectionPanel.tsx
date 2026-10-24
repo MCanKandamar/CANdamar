@@ -1,5 +1,8 @@
+import { useCallback, useEffect, useState } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useFrameStore } from '../../store/frameStore';
+import { apiListPorts } from '../../api/client';
+import type { SerialPortInfo } from '../../api/client';
 import type { InterfaceType } from '../../types/can';
 
 const BITRATES = [
@@ -45,6 +48,100 @@ const INTERFACES: { label: string; value: InterfaceType; hint: string }[] = [
   { value: 'pcan',        label: 'PCAN (PEAK)',                  hint: 'PEAK PCAN-USB - requires PEAK driver installed. Shows as CAN-Hardware in Device Manager.' },
   { value: 'kvaser',      label: 'Kvaser',                       hint: 'Kvaser hardware - requires Kvaser CANlib installed. Shows as CAN-Hardware (Kvaser) in Device Manager.' },
 ];
+
+// ── COM port picker (slcan, seeedstudio) ─────────────────────────────────────
+// Lists the serial ports the backend can see. Known slcan adapters are
+// labelled and picked automatically; "Other" allows typing any port name.
+
+const MANUAL = '__manual__';
+
+function portLabel(p: SerialPortInfo): string {
+  return `${p.device} - ${p.adapter ?? p.description}`;
+}
+
+function ComPortField({ placeholder, disabled }: { placeholder: string; disabled: boolean }) {
+  const channel   = useConnectionStore((s) => s.config.channel ?? '');
+  const setConfig = useConnectionStore((s) => s.setConfig);
+
+  const [ports,   setPorts]   = useState<SerialPortInfo[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [manual,  setManual]  = useState(false);
+
+  const refresh = useCallback(async (initial: boolean) => {
+    setLoading(true);
+    try {
+      const res = await apiListPorts();
+      setPorts(res.ports);
+      // Auto-pick only a known adapter or a USB port -- never a Bluetooth/legacy
+      // COM port. On first load a known adapter wins over the default "COM3";
+      // later refreshes only replace a port that has disappeared.
+      const current = useConnectionStore.getState().config.channel ?? '';
+      const known   = res.ports.find((p) => p.adapter);
+      const currentPort = res.ports.find((p) => p.device === current);
+      if (initial && known && !currentPort?.adapter) {
+        setConfig({ channel: known.device });
+      } else if (!currentPort) {
+        const pick = known ?? res.ports.find((p) => p.usb);
+        if (pick) setConfig({ channel: pick.device });
+      }
+    } catch {
+      setPorts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [setConfig]);
+
+  useEffect(() => { if (!disabled) refresh(true); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const listed     = ports?.some((p) => p.device === channel) ?? false;
+  const showManual = manual || (ports !== null && ports.length === 0);
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {showManual ? (
+          <input
+            className="field-input"
+            type="text"
+            placeholder={placeholder}
+            value={channel}
+            disabled={disabled}
+            onChange={(e) => setConfig({ channel: e.target.value })}
+          />
+        ) : (
+          <select
+            className="field-select"
+            value={channel}
+            disabled={disabled || ports === null}
+            onChange={(e) => {
+              if (e.target.value === MANUAL) setManual(true);
+              else setConfig({ channel: e.target.value });
+            }}
+          >
+            {/* Keep a typed or saved value visible even if it is not plugged in */}
+            {!listed && <option value={channel}>{channel ? `${channel} - not found` : '- select port -'}</option>}
+            {(ports ?? []).map((p) => (
+              <option key={p.device} value={p.device}>{portLabel(p)}</option>
+            ))}
+            <option value={MANUAL}>Other (type a port name)...</option>
+          </select>
+        )}
+        <button
+          className="btn btn-ghost"
+          style={{ padding: '0 8px', flexShrink: 0 }}
+          onClick={() => { setManual(false); refresh(false); }}
+          disabled={disabled || loading}
+          title="Refresh the port list"
+        >
+          {loading ? '...' : '↻'}
+        </button>
+      </div>
+      {ports !== null && ports.length === 0 && (
+        <span style={styles.hint}>No serial ports found - type the port name.</span>
+      )}
+    </>
+  );
+}
 
 export function ConnectionPanel() {
   const status       = useConnectionStore((s) => s.status);
@@ -106,14 +203,7 @@ export function ConnectionPanel() {
         <>
           <div className="field-group">
             <label className="field-label">COM Port</label>
-            <input
-              className="field-input"
-              type="text"
-              placeholder="COM3"
-              value={config.channel ?? ''}
-              disabled={isConnected || isBusy}
-              onChange={(e) => setConfig({ channel: e.target.value })}
-            />
+            <ComPortField placeholder="COM3" disabled={isConnected || isBusy} />
             <label className="field-label">Baudrate</label>
             <select
               className="field-select"
@@ -151,14 +241,7 @@ export function ConnectionPanel() {
       {config.interface === 'seeedstudio' && (
         <div className="field-group">
           <label className="field-label">COM Port</label>
-          <input
-            className="field-input"
-            type="text"
-            placeholder="COM8"
-            value={config.channel ?? ''}
-            disabled={isConnected || isBusy}
-            onChange={(e) => setConfig({ channel: e.target.value })}
-          />
+          <ComPortField placeholder="COM8" disabled={isConnected || isBusy} />
         </div>
       )}
 

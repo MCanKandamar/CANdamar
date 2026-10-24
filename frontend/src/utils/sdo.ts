@@ -81,3 +81,78 @@ export function sdoAbortCodeOf(r: SdoResult): number | null {
   if (bytes.length !== 4 || bytes.some(isNaN)) return null;
   return (bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)) >>> 0;
 }
+
+// ── Typed values for expedited SDO download ────────────────────────────────
+
+export type SdoValueType = 'u8' | 'i8' | 'u16' | 'i16' | 'u32' | 'i32' | 'f32' | 'raw';
+
+export const SDO_VALUE_TYPES: { id: SdoValueType; label: string; size: number }[] = [
+  { id: 'u8',  label: 'UNSIGNED8',  size: 1 },
+  { id: 'i8',  label: 'INTEGER8',   size: 1 },
+  { id: 'u16', label: 'UNSIGNED16', size: 2 },
+  { id: 'i16', label: 'INTEGER16',  size: 2 },
+  { id: 'u32', label: 'UNSIGNED32', size: 4 },
+  { id: 'i32', label: 'INTEGER32',  size: 4 },
+  { id: 'f32', label: 'REAL32',     size: 4 },
+  { id: 'raw', label: 'Raw bytes',  size: 0 },
+];
+
+export type SdoEncodeResult = { bytes: number[] } | { error: string };
+
+/** Parse "DE AD 01" / "0xDE,0xAD" into 1-4 bytes (the original raw input). */
+function parseRawBytes(text: string): SdoEncodeResult {
+  const parts = text.trim().split(/\s+|,/).filter(Boolean);
+  const out: number[] = [];
+  for (const p of parts) {
+    const b = parseInt(p.replace(/^0x/i, ''), 16);
+    if (!/^(0x)?[0-9a-f]{1,2}$/i.test(p) || isNaN(b)) return { error: `"${p}" is not a hex byte` };
+    out.push(b);
+  }
+  if (out.length < 1 || out.length > 4) return { error: 'Enter 1-4 bytes' };
+  return { bytes: out };
+}
+
+/**
+ * Encode a user-entered value as little-endian bytes for an SDO write.
+ * Integers accept decimal ("-1500") or hex ("0x5DC"); hex is taken as the
+ * raw bit pattern, so "0xFFFF" is valid for INTEGER16 (= -1).
+ */
+export function encodeSdoValue(type: SdoValueType, text: string): SdoEncodeResult {
+  const t = text.trim();
+  if (!t) return { error: 'Enter a value' };
+  if (type === 'raw') return parseRawBytes(t);
+
+  const size = SDO_VALUE_TYPES.find((x) => x.id === type)!.size;
+  const view = new DataView(new ArrayBuffer(size));
+
+  if (type === 'f32') {
+    const v = Number(t);
+    if (!Number.isFinite(v)) return { error: 'Not a number' };
+    view.setFloat32(0, v, true);
+  } else {
+    const bits   = size * 8;
+    const signed = type.startsWith('i');
+    let pattern: number;   // unsigned bit pattern that goes on the wire
+    if (/^0x[0-9a-f]+$/i.test(t)) {
+      pattern = parseInt(t.slice(2), 16);
+      if (pattern > 2 ** bits - 1) return { error: `Out of range for ${bits}-bit` };
+    } else if (/^[+-]?\d+$/.test(t)) {
+      const v   = parseInt(t, 10);
+      const min = signed ? -(2 ** (bits - 1)) : 0;
+      const max = signed ? 2 ** (bits - 1) - 1 : 2 ** bits - 1;
+      if (v < min || v > max) return { error: `Range ${min} .. ${max}` };
+      pattern = v < 0 ? v + 2 ** bits : v;   // two's complement
+    } else {
+      return { error: 'Integer expected (decimal or 0x hex)' };
+    }
+    if (size === 1)      view.setUint8(0, pattern);
+    else if (size === 2) view.setUint16(0, pattern, true);
+    else                 view.setUint32(0, pattern, true);
+  }
+  return { bytes: Array.from(new Uint8Array(view.buffer)) };
+}
+
+/** "DC 05 00 00" */
+export function bytesToHex(bytes: number[]): string {
+  return bytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+}

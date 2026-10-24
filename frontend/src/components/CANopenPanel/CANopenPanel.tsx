@@ -19,7 +19,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCANopenStore } from '../../store/canopenStore';
 import type { CANopenNode, SdoTransaction, EmcyRecord } from '../../store/canopenStore';
-import { formatAbortCode, isSdoWriteResponse, sdoAbortCodeOf, sdoAbortText } from '../../utils/sdo';
+import {
+  bytesToHex, encodeSdoValue, formatAbortCode, isSdoWriteResponse,
+  sdoAbortCodeOf, sdoAbortText, SDO_VALUE_TYPES,
+} from '../../utils/sdo';
+import type { SdoValueType } from '../../utils/sdo';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -631,7 +635,9 @@ function SdoWritePanel() {
   const [nodeId,  setNodeId]  = useState('1');
   const [index,   setIndex]   = useState('0x6040');
   const [subIdx,  setSubIdx]  = useState('0');
-  const [dataHex, setDataHex] = useState('');
+  // Typed entry avoids hand-encoding little-endian bytes (0x6040 is UNSIGNED16)
+  const [valType, setValType] = useState<SdoValueType>('u16');
+  const [value,   setValue]   = useState('');
   const [objName, setObjName] = useState<string | null>(null);
   const [result,  setResult]  = useState<string | null>(null);
   const [busy,    setBusy]    = useState(false);
@@ -651,19 +657,10 @@ function SdoWritePanel() {
     return () => clearTimeout(t);
   }, [index, subIdx]);
 
-  const parseBytes = (): number[] | null => {
-    const parts = dataHex.trim().split(/\s+|,/).filter(Boolean);
-    const out: number[] = [];
-    for (const p of parts) {
-      const b = parseInt(p.replace(/^0x/i, ''), 16);
-      if (isNaN(b) || b < 0 || b > 255) return null;
-      out.push(b);
-    }
-    return out.length >= 1 && out.length <= 4 ? out : null;
-  };
-
-  const bytes    = parseBytes();
-  const hasBytes = bytes !== null && dataHex.trim().length > 0;
+  const encoded  = encodeSdoValue(valType, value);
+  const bytes    = 'bytes' in encoded ? encoded.bytes : null;
+  const hasBytes = bytes !== null;
+  const showErr  = value.trim().length > 0 && !hasBytes;
 
   const handleSend = async () => {
     if (!bytes) return;
@@ -706,15 +703,26 @@ function SdoWritePanel() {
             onChange={(e) => setSubIdx(e.target.value)} placeholder="0" />
         </div>
         <div style={s.inputGroup}>
-          <span style={s.inputLabel}>Data (LE hex bytes, 1-4)</span>
+          <span style={s.inputLabel}>Type</span>
+          <select style={s.select} value={valType}
+            onChange={(e) => { setValType(e.target.value as SdoValueType); setResult(null); }}>
+            {SDO_VALUE_TYPES.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+        <div style={s.inputGroup}>
+          <span style={s.inputLabel}>
+            {valType === 'raw' ? 'Data (LE hex bytes, 1-4)' : 'Value (decimal or 0x hex)'}
+          </span>
           <input
             style={{
               ...s.inputWide, width: 120,
-              borderColor: dataHex.trim() && !hasBytes ? 'var(--accent-red)' : undefined,
+              borderColor: showErr ? 'var(--accent-red)' : undefined,
             }}
-            value={dataHex}
-            onChange={(e) => { setDataHex(e.target.value); setResult(null); }}
-            placeholder="0F 00"
+            value={value}
+            onChange={(e) => { setValue(e.target.value); setResult(null); }}
+            placeholder={valType === 'raw' ? '0F 00' : valType === 'f32' ? '1.5' : '15'}
           />
         </div>
         <button
@@ -730,8 +738,19 @@ function SdoWritePanel() {
           {busy ? '...' : 'Write'}
         </button>
       </div>
-      {objName && (
-        <div style={{ fontSize: 11, color: 'var(--accent-blue)', marginTop: 4 }}>{objName}</div>
+      {(objName || value.trim()) && (
+        <div style={{ display: 'flex', gap: 12, fontSize: 11, marginTop: 4, flexWrap: 'wrap' as const }}>
+          {objName && <span style={{ color: 'var(--accent-blue)' }}>{objName}</span>}
+          {/* Preview of exactly what goes on the wire */}
+          {hasBytes && (
+            <span style={{ ...s.mono, fontSize: 11, color: 'var(--text-secondary)' }}>
+              sends {bytesToHex(bytes)} <span style={{ color: 'var(--text-muted)' }}>(little-endian)</span>
+            </span>
+          )}
+          {showErr && 'error' in encoded && (
+            <span style={{ color: 'var(--accent-red)' }}>{encoded.error}</span>
+          )}
+        </div>
       )}
       {result && <div style={result.startsWith('Error') ? s.resultErr : s.resultOk}>{result}</div>}
     </div>

@@ -183,6 +183,12 @@ body {
   width: 100vw;
 }
 
+/* Sidebar hidden: the column collapses and the main area takes the space */
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 0 1fr var(--rightpanel-width);
+}
+.app-shell.sidebar-collapsed .app-sidebar { display: none; }
+
 .app-topbar      { grid-area: topbar; }
 .app-sidebar     { grid-area: sidebar; }
 .app-main        { grid-area: main; }

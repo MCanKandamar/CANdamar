@@ -1,6 +1,7 @@
 import { useConnectionStore } from '../../store/connectionStore';
 import { useStatsStore } from '../../store/statsStore';
 import { useThemeStore } from '../../store/themeStore';
+import { useLayoutStore } from '../../store/layoutStore';
 
 const STATUS_LABELS: Record<string, string> = {
   idle:          'DISCONNECTED',
@@ -37,11 +38,25 @@ function MoonIcon() {
   );
 }
 
+// Sidebar panel icon -- filled left column when the sidebar is open
+function SidebarIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="9" y1="4" x2="9" y2="20" />
+      {open && <rect x="3" y="4" width="6" height="16" fill="currentColor" stroke="none" opacity="0.35" />}
+    </svg>
+  );
+}
+
 export function TopBar() {
   const status    = useConnectionStore((s) => s.status);
   const config    = useConnectionStore((s) => s.config);
   const stats     = useStatsStore((s) => s.stats);
   const { theme, toggle } = useThemeStore();
+  const sidebarOpen   = useLayoutStore((s) => s.sidebarOpen);
+  const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
 
   const statusLabel = STATUS_LABELS[status] ?? status.toUpperCase();
   const isLive      = status === 'connected';
@@ -49,6 +64,17 @@ export function TopBar() {
 
   return (
     <div className="app-topbar" style={styles.bar}>
+
+      {/* Sidebar toggle */}
+      <button
+        className="theme-toggle"
+        onClick={toggleSidebar}
+        title={sidebarOpen ? 'Hide sidebar (Ctrl+B)' : 'Show sidebar (Ctrl+B)'}
+        aria-label={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+        aria-pressed={sidebarOpen}
+      >
+        <SidebarIcon open={sidebarOpen} />
+      </button>
 
       {/* Logo */}
       <div style={styles.logo}>

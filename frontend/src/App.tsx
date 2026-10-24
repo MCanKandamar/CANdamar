@@ -6,6 +6,7 @@ import { Sidebar } from './components/Layout/Sidebar';
 import { MessageTable } from './components/MessageTable/MessageTable';
 import { BottomPanel } from './components/Layout/BottomPanel';
 import { ProtocolPanel } from './components/Layout/ProtocolPanel';
+import { useLayoutStore } from './store/layoutStore';
 
 const MIN_RIGHTPANEL = 240;
 const MAX_RIGHTPANEL = 1100;
@@ -22,6 +23,21 @@ function loadRightWidth(): number {
 export function App() {
   useStatusSync();
   useWebSocket();
+
+  const sidebarOpen   = useLayoutStore((s) => s.sidebarOpen);
+  const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
+
+  // Ctrl+B toggles the sidebar (same shortcut as VS Code)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleSidebar]);
 
   const [rightWidth, setRightWidth] = useState<number>(loadRightWidth);
   const [dragging, setDragging]     = useState(false);
@@ -58,7 +74,7 @@ export function App() {
   }, [dragging]);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${sidebarOpen ? '' : ' sidebar-collapsed'}`}>
       <TopBar />
       <Sidebar />
       <MessageTable />

@@ -134,11 +134,14 @@ Up to 50 transactions stored. Newest entries appear at the top.
 
 ### SDO Read
 
-Sends an expedited SDO upload request to a live node. The response arrives as a normal
-CAN frame, is decoded by the passive capture pipeline, and appears in the SDO log
-above. No synchronous blocking -- the request fires and returns immediately.
+Reads one object from a live node and shows the value under the form. Values up to
+4 bytes use an expedited upload; longer values (e.g. 0x1008 Manufacturer Device Name)
+are read with a segmented upload, and printable strings are shown as text. An abort
+is shown with its code and meaning (e.g. `0x06020000` object does not exist). The
+transaction also appears in the SDO log above.
 
-Fields: Node ID (decimal), Index (hex, e.g. 0x1008), Sub (decimal).
+Fields: Node ID (decimal), Index (hex, e.g. 0x1008), Sub (decimal). Node ID follows
+the first discovered node until you edit it.
 
 **Tip:** Use the Object Dictionary browser below to find standard object indices and
 auto-fill this form with one click.
@@ -148,16 +151,18 @@ auto-fill this form with one click.
 ### SDO Write
 
 Sends an expedited SDO download to a live node. Writes are sent immediately on click
--- no second confirmation step. The button is disabled (amber) until valid hex byte
-data is entered (1-4 bytes, space or comma separated, e.g. `0F 00`).
+-- no second confirmation step.
 
-The object name is looked up automatically as you type the index.
+Pick the object **Type** (UNSIGNED8/16/32, INTEGER8/16/32, REAL32) and enter the
+value as a number (decimal, or `0x` hex for the raw bit pattern). CANviz encodes it
+little-endian, checks the range and shows the exact bytes before sending, e.g.
+INTEGER32 `1500` sends `DC 05 00 00`. **Raw bytes** keeps the old behaviour: 1-4 hex
+bytes, LSB first (`0F 00` for Controlword 0x000F).
 
-Response (download acknowledgement from node) appears in the SDO log.
+The object name is looked up automatically as you type the index (built-in dictionary
+first, then the loaded EDS).
 
-**Data encoding:** Little-endian byte order. For a 16-bit value like Controlword 0x000F,
-enter `0F 00` (LSB first). For a 32-bit value like Target Position 12345 (0x00003039),
-enter `39 30 00 00`.
+The node's acknowledgement appears in the SDO log as **WRITE OK**.
 
 **Example -- read device name:**
 ```
@@ -166,12 +171,12 @@ Node ID: 1    Index: 0x1008    Sub: 0    (no data needed, use SDO Read instead)
 
 **Example -- set Modes of Operation to Profile Position (mode 1):**
 ```
-Node ID: 1    Index: 0x6060    Sub: 0    Data: 01
+Node ID: 1    Index: 0x6060    Sub: 0    Type: INTEGER8     Value: 1
 ```
 
-**Example -- set Profile Velocity to 500 counts/s (0x000001F4):**
+**Example -- set Profile Velocity to 500 counts/s:**
 ```
-Node ID: 1    Index: 0x6081    Sub: 0    Data: F4 01 00 00
+Node ID: 1    Index: 0x6081    Sub: 0    Type: UNSIGNED32   Value: 500   (sends F4 01 00 00)
 ```
 
 ---
@@ -197,23 +202,30 @@ that appears, then click Send.
 
 ### Object Dictionary Browser
 
-Collapsible section (click the header to expand). Contains all 180 built-in CiA 301
-and CiA 402 standard objects. Search by name or index:
+Collapsible section (click the header to expand). Two sources:
+
+- **CiA 301 + 402 built-in** -- all 180 standard objects
+- **EDS** -- every object of the uploaded EDS, including manufacturer objects
+  (0x2000+), with data type and access (`ro`, `rw`, `rww` ...)
+
+Search by name or index:
 
 - `velocity` -- shows all velocity-related objects
 - `6041` or `0x6041` -- finds Statusword directly
 - `heartbeat` -- finds producer/consumer heartbeat time objects
 
 Clicking **Read** next to any result auto-fills the SDO Read form above with that
-index and subindex. Press Read in the SDO Read panel to query the live node.
+index and subindex. For writable EDS objects, **Write** fills the SDO Write form with
+the index, subindex and matching value type. Press Read / Write in the form to query
+the live node.
 
 ---
 
 ### Read All Node Objects
 
-Sends 15 SDO read requests to every discovered node and collects the responses in
-the SDO log. One click replaces what would otherwise be 15 manual read operations
-per node.
+Reads 15 standard objects from every discovered node, one after another, and
+collects the values (or abort codes) in the SDO log. A node that does not answer is
+skipped after its first timeout.
 
 Objects read per node:
 
@@ -311,10 +323,11 @@ All endpoints are prefixed `/canopen`.
 | POST | `/canopen/reset` | Clear all accumulated state |
 | POST | `/canopen/eds` | Upload EDS / DCF file (multipart form) |
 | DELETE | `/canopen/eds` | Unload current EDS |
-| POST | `/canopen/sdo/read` | `{"node_id": 1, "index": 4161, "subindex": 0}` |
+| POST | `/canopen/sdo/read` | `{"node_id": 1, "index": 4104, "subindex": 0}` -- returns `data_hex`, `value_int`, `value_text`, `segmented`, or `abort_code` |
 | POST | `/canopen/sdo/write` | `{"node_id": 1, "index": 24640, "subindex": 0, "data": [15, 0], "confirmed": true}` |
 | POST | `/canopen/nmt` | `{"node_id": 0, "command": 1, "confirmed": true}` |
 | GET | `/canopen/objects` | `?q=velocity` -- search built-in object dictionary |
+| GET | `/canopen/eds/objects` | `?q=0x2000` -- objects of the loaded EDS with `data_type` and `access` |
 | POST | `/canopen/export` | Read all standard objects from all discovered nodes |
 
 Full interactive docs at `http://localhost:8080/docs` while running.
@@ -358,7 +371,7 @@ Full interactive docs at `http://localhost:8080/docs` while running.
 | Limitation | Detail |
 |------------|--------|
 | EDS required for PDO names | Without EDS, PDO payloads are raw hex. TPDO1 bytes 0-1 are decoded as Statusword by default (CiA 402 standard mapping assumption). |
-| SDO segmented / block transfer | Only expedited SDO (1-4 byte payloads) is decoded and displayed. Segmented SDO responses show as raw data. |
+| SDO block transfer / segmented download | SDO Read supports expedited and segmented upload; SDO Write is expedited (1-4 bytes). Segmented transfers between other devices are only logged passively. |
 | RxPDO decode | RPDO frames (from master to drive) are captured and typed. Signal decode requires EDS. |
 | CANopen over CAN FD (CiA 1301) | Out of scope. Requires CAN FD hardware (minimum ~$53). |
 | Node ID reassignment via LSS | LSS (Layer Setting Services) is not decoded. Node IDs are assumed fixed. |

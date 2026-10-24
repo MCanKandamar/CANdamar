@@ -5,6 +5,30 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## Unreleased
+
+### Added
+- Workspace tabs -- Frames, CANopen, J1939 and Plot are Chrome-style tabs (drag to reorder) with split view to show two side by side; layout is saved
+- Collapsible sidebar (top bar button, Ctrl+B) and bottom panel collapse / maximize
+- Plot tab resizes with the window; custom signals plot raw bytes without a DBC (CAN ID, start byte, type, byte order, scale/offset)
+- slcan: normal / listen-only mode (`L`), full S0-S8 bitrate list, `--listen-only` CLI flag
+- Serial port list (`GET /ports`) with known slcan adapters flagged; COM port dropdown in the Connection panel
+- Remote (RTR) frames: send from the Send Frame panel, RTR badge in the message table
+- SDO Read with segmented upload -- values longer than 4 bytes; `/canopen/sdo/read` now returns the value
+- Typed SDO Write -- enter numbers, bytes are encoded little-endian and previewed
+- SDO log shows WRITE OK and decoded abort codes (`abort_code` in transactions)
+- EDS object list (`GET /canopen/eds/objects`) in the Object Dictionary browser, with one-click Read / Write
+
+### Changed
+- The right-hand protocol panel is replaced by workspace tabs; Plot moved from the bottom panel to its own tab
+- Read All Node Objects reads one object at a time and skips nodes that do not answer
+
+### Fixed
+- Upload / download segment response names were swapped in the SDO decoder
+- SDO Write object name lookup never matched exactly (`0X...` vs `0x...`)
+
+---
+
 ## v0.3.1 -- CANopen CiA 301 + CiA 402
 
 **CANopen decoder** -- passive protocol intelligence for robotics, industrial

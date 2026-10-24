@@ -120,9 +120,12 @@ CiA 402 covers virtually every servo drive and motor controller.
 - **CiA 402 Drive Control** -- Quick buttons: Enable, Switch On, Shutdown, Quick Stop, Disable, Fault Reset. One-time safety notice.
 - **EMCY decode** -- error code, error class name, error register flags, manufacturer data
 - **SDO log** -- request/response pairs auto-paired from bus traffic with object names from a 180-entry built-in CiA 301/402 dictionary
-- **SDO Read / Write** -- send expedited reads and writes to any live node from the panel
+- **SDO Read / Write** -- reads use expedited or segmented upload (values longer than 4 bytes, e.g. the
+  device name); writes take a typed value (INTEGER/UNSIGNED 8-32, REAL32) and show the bytes sent.
+  The SDO log shows WRITE OK and decoded abort codes
 - **NMT commands** -- Operational, Pre-Op, Stop, Reset Node, Reset Comm with node selector
-- **Object dictionary browser** -- search 180 standard objects by name or index
+- **Object dictionary browser** -- search 180 standard objects, or every object of a loaded EDS
+  (including manufacturer objects 0x2000+) with data type and access; one click fills SDO Read / Write
 - **PDO signal plotting** -- upload a device EDS file to decode TPDO payloads to named signals that feed the Plot tab
 - **Read All Node Objects** -- one click reads 15 standard CiA 301/402 objects from every discovered node
 
@@ -192,6 +195,7 @@ canviz [OPTIONS]
   --host        Host to bind to  (default: 127.0.0.1)
   --port        Port to bind to  (default: 8080)
   --headless    Start without opening a browser
+  --listen-only slcan only: open the channel in listen-only mode ('L')
 ```
 
 **Subcommands:**
@@ -224,7 +228,8 @@ Full interactive docs at `http://localhost:8080/docs` while running.
 | POST | `/disconnect` | Close interface |
 | GET | `/status` | Connection state and config |
 | GET | `/stats` | Bus statistics snapshot |
-| POST | `/send` | Transmit a CAN frame |
+| POST | `/send` | Transmit a CAN frame (data or remote/RTR) |
+| GET | `/ports` | List serial ports, known slcan adapters flagged |
 | WS | `/ws/frames` | Live frame and stats stream (JSON) |
 | POST | `/dbc/load` | Upload a DBC file |
 | GET | `/dbc/messages` | List decoded message definitions |
@@ -235,10 +240,11 @@ Full interactive docs at `http://localhost:8080/docs` while running.
 | POST | `/replay/start` | Start replaying a log file |
 | POST | `/replay/stop` | Stop replay |
 | GET | `/canopen/status` | CANopen decoder state, nodes, SDO log |
-| POST | `/canopen/sdo/read` | Send SDO upload request to a node |
+| POST | `/canopen/sdo/read` | Read an object (expedited or segmented) and return its value |
 | POST | `/canopen/sdo/write` | Send SDO download to a node |
 | POST | `/canopen/nmt` | Send NMT command |
 | GET | `/canopen/objects` | Search built-in CiA 301/402 object dictionary |
+| GET | `/canopen/eds/objects` | List objects of the loaded EDS (type, access) |
 
 ---
 
@@ -268,7 +274,8 @@ Full interactive docs at `http://localhost:8080/docs` while running.
 - **slcan error frames** -- slcan firmware silently drops error frames before forwarding. Bus error statistics read 0% on slcan interfaces even on a degraded bus. Use gs_usb for accurate error visibility.
 - **Kvaser on Windows** -- CANviz has full UI support. Connection fails due to a bug in python-can 4.6.1 (`canIoCtlInit` returning `canERR_PARAM`). Tracked at [python-can #2051](https://github.com/hardbyte/python-can/issues/2051). Upgrade python-can once resolved and Kvaser will work without any CANviz changes.
 - **CANopen PDO decode** -- requires the device EDS file. Without EDS, TPDO1 bytes 0-1 are decoded as Statusword by default assumption; other PDO bytes are raw hex.
-- **CANopen SDO segmented / block transfer** -- only expedited SDO (1-4 byte payloads) is decoded. Segmented responses show as raw data.
+- **CANopen SDO block transfer / segmented download** -- reads support expedited and segmented upload;
+  writes are expedited (1-4 bytes). Segmented transfers between other devices are only logged passively.
 - **J1939 PGN database** -- SAE J1939 Digital Annex is copyrighted and cannot be redistributed. The built-in 54-PGN table covers common engine and vehicle signals. Load your own DBC for full coverage.
 - **Replay timing** -- depends on the Python asyncio scheduler, not a hardware clock.
 - **Browser support** -- tested on Chrome. Firefox and Edge are best-effort.

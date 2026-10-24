@@ -82,6 +82,7 @@ Use `--headless` when running CANviz over SSH, in Docker, or as part of an autom
 | `--host` | `127.0.0.1` | Host to bind (use `0.0.0.0` to expose on the network) |
 | `--port` | `8080` | Port to listen on |
 | `--headless` | off | Skip opening a browser |
+| `--listen-only` | off | slcan only: open the channel in listen-only mode (`L` instead of `O`); sending is disabled |
 | `--j1939` | off | Auto-enable J1939 decoder after connecting |
 | `--log-level` | `info` | `debug` · `info` · `warning` · `error` |
 

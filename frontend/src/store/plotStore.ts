@@ -107,6 +107,8 @@ interface PlotStore {
   toggleSignal:     (key: string) => void;
   setWindowSec:     (s: number) => void;
   clearBuffers:     () => void;
+  /** Drop one signal completely: its buffer, selection and selector entry. */
+  forgetSignal:     (key: string) => void;
 }
 
 export const usePlotStore = create<PlotStore>((set, get) => ({
@@ -128,5 +130,13 @@ export const usePlotStore = create<PlotStore>((set, get) => ({
   clearBuffers: () => {
     ringBuffers.clear();
     set({ selectedSignals: [], availableSignals: [] });
+  },
+
+  forgetSignal: (key) => {
+    ringBuffers.delete(key);
+    set((s) => ({
+      selectedSignals:  s.selectedSignals.filter((k) => k !== key),
+      availableSignals: s.availableSignals.filter((k) => k !== key),
+    }));
   },
 }));

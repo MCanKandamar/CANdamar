@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { CanFrame, FrameRow, FilterState } from '../types/can';
 import { usePlotStore } from './plotStore';
 import { addSignalValues } from './plotStore';
+import { decodeCustomSignals } from './customSignalStore';
 
 // Rolling window duration for rate calculation (ms)
 const RATE_WINDOW_MS = 1000;
@@ -119,6 +120,12 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
         value:        sig.value,
       }));
       addSignalValues(pdoSignals, tSec);
+    }
+
+    // Feed DBC-less custom signals (defined in the Plot tab) into the plot store
+    const customSignals = decodeCustomSignals(numericId, frame.data);
+    if (customSignals.length) {
+      addSignalValues(customSignals, nowMs / 1000);
     }
 
     const frames = new Map(store.frames);

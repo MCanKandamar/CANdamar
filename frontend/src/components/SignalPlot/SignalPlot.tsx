@@ -4,6 +4,7 @@ import { usePlot } from '../../hooks/usePlot';
 import { usePlotRenderLoop } from '../../hooks/usePlotRenderLoop';
 import { usePlotStore, SIGNAL_COLORS, MAX_SIGNALS, getLatestValue } from '../../store/plotStore';
 import { useThemeStore } from '../../store/themeStore';
+import { CustomSignalForm } from './CustomSignalForm';
 
 // ── Theme helper ─────────────────────────────────────────────────────────────
 // Reads CSS custom properties at render time so uPlot canvas colours
@@ -37,6 +38,8 @@ export function SignalPlot() {
 
   // Subscribe to theme so opts rebuild on switch
   const theme = useThemeStore((s) => s.theme);
+
+  const [showCustom, setShowCustom] = useState(false);
 
   // ── Pause / drag state ──────────────────────────────────────────────────
   const isPausedRef   = useRef(false);
@@ -291,6 +294,24 @@ export function SignalPlot() {
           </select>
         )}
 
+        {/* DBC-less signal from raw bytes */}
+        <button
+          onClick={() => setShowCustom((v) => !v)}
+          title="Plot raw bytes of any CAN ID without a DBC file"
+          style={{
+            background: showCustom ? 'var(--accent-green-dim)' : 'var(--bg-panel)',
+            color: showCustom ? 'var(--accent-green)' : 'var(--text-secondary)',
+            border: '1px dashed var(--border-strong)',
+            borderRadius: '4px',
+            padding: '3px 8px',
+            fontSize: '11px',
+            fontFamily: 'monospace',
+            cursor: 'pointer',
+          }}
+        >
+          + custom signal
+        </button>
+
         <div style={{ flex: 1 }} />
 
         {/* PNG Export */}
@@ -400,6 +421,8 @@ export function SignalPlot() {
         </select>
       </div>
 
+      {showCustom && <CustomSignalForm onClose={() => setShowCustom(false)} />}
+
       {/* Plot canvas or empty state */}
       {selectedSignals.length > 0 ? (
         <div
@@ -423,7 +446,7 @@ export function SignalPlot() {
           borderRadius: '4px',
         }}>
           {availableSignals.length === 0
-            ? 'No decoded signals — load a DBC file then connect'
+            ? 'No decoded signals — load a DBC file, or use "+ custom signal" to plot raw bytes'
             : 'Add a signal above to begin plotting'}
         </div>
       )}

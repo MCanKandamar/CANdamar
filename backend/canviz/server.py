@@ -41,10 +41,17 @@ class _SuppressPollLog(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(_SuppressPollLog())
 
 # Single source of truth for the version: pyproject.toml (via package metadata)
-try:
-    __version__ = package_version("canviz")
-except PackageNotFoundError:   # running from a source tree without install
-    __version__ = "0.0.0+unknown"
+def _installed_version() -> str:
+    # "candamar" since the fork rename; "canviz" for an older install
+    for dist in ("candamar", "canviz"):
+        try:
+            return package_version(dist)
+        except PackageNotFoundError:
+            continue
+    return "0.0.0+unknown"   # running from a source tree without install
+
+
+__version__ = _installed_version()
 
 
 @asynccontextmanager
@@ -57,7 +64,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="CANviz",
+    title="CANdamar",
     description="Open-source browser-based CAN bus analyzer",
     version=__version__,
     lifespan=lifespan,
@@ -112,4 +119,4 @@ mount_frontend(app)
 
 @app.get("/")
 async def root():
-    return {"name": "CANviz", "version": __version__, "docs": "/docs"}
+    return {"name": "CANdamar", "version": __version__, "docs": "/docs"}

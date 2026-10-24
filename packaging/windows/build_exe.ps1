@@ -1,5 +1,5 @@
 <#
-  Build dist\CANviz.exe -- a single-file Windows app (no Python or Node.js
+  Build dist\CANdamar.exe -- a single-file Windows app (no Python or Node.js
   needed on the target PC, only the Microsoft Edge WebView2 Runtime).
 
   Run from anywhere:
@@ -43,15 +43,15 @@ if (-not (Test-Path "$Venv\Scripts\python.exe")) {
 }
 $Py = "$Venv\Scripts\python.exe"
 Invoke-Step 'upgrade pip'     { & $Py -m pip install --quiet --upgrade pip }
-Invoke-Step 'install canviz'  { & $Py -m pip install --quiet "$Root\backend[desktop]" "pyinstaller>=6.10" }
+Invoke-Step 'install candamar' { & $Py -m pip install --quiet "$Root\backend[desktop]" "pyinstaller>=6.10" }
 
 # 3. One-file executable
 Invoke-Step 'pyinstaller' {
     & $Py -m PyInstaller --noconfirm --clean `
         --distpath "$Root\dist" `
         --workpath "$Root\build\pyinstaller" `
-        "$Root\packaging\windows\canviz.spec"
+        "$Root\packaging\windows\candamar.spec"
 }
 
-$Exe = Get-Item "$Root\dist\CANviz.exe"
+$Exe = Get-Item "$Root\dist\CANdamar.exe"
 Write-Host ("Built {0} ({1:N1} MB)" -f $Exe.FullName, ($Exe.Length / 1MB)) -ForegroundColor Green

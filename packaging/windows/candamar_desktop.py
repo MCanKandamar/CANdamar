@@ -1,4 +1,4 @@
-# PyInstaller entry script for CANviz.exe -- see canviz/desktop.py
+# PyInstaller entry script for CANdamar.exe -- see canviz/desktop.py
 from canviz.desktop import main
 
 if __name__ == "__main__":

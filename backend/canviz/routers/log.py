@@ -117,7 +117,7 @@ async def log_start():
     if not bus_manager.connected:
         raise HTTPException(status_code=400, detail="Not connected. Call /connect first.")
 
-    base = time.strftime("canviz_%Y%m%d_%H%M%S")
+    base = time.strftime("candamar_%Y%m%d_%H%M%S")
     _session = LogSession(base)
     await _session.start()
     return {"ok": True, "base": base}

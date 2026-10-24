@@ -1,7 +1,8 @@
 """
 canviz/cli.py
 -------------
-Typer-based entry point registered as the `canviz` console script.
+Typer-based entry point registered as the `candamar` console script
+(also installed as `canviz`, the original command name).
 
 Subcommands:
   canviz serve    - start the web server (default behaviour, backward-compatible)
@@ -51,8 +52,8 @@ from canviz.config import settings
 # ── Typer app ────────────────────────────────────────────────────────────────
 
 app = typer.Typer(
-    name="canviz",
-    help="CANviz - open-source browser-based CAN bus analyzer",
+    name="candamar",
+    help="CANdamar - open-source browser-based CAN bus analyzer",
     add_completion=True,          # generates shell autocomplete for bash/zsh/fish
     no_args_is_help=False,        # allow bare `canviz` to run serve (backward compat)
     invoke_without_command=True,
@@ -114,7 +115,7 @@ def root(
     log_level: Annotated[str, typer.Option("--log-level", help="Logging level")] = "info",
 ) -> None:
     """
-    Start the CANviz web server (default behaviour - runs when no subcommand is given).
+    Start the CANdamar web server (default behaviour - runs when no subcommand is given).
     Backward-compatible with all previous canviz flags.
     """
     if ctx.invoked_subcommand is not None:
@@ -153,7 +154,7 @@ def serve(
     j1939: Annotated[bool, typer.Option("--j1939", help="Auto-enable J1939 decoder after connect")] = False,
     log_level: Annotated[str, typer.Option("--log-level")] = "info",
 ) -> None:
-    """Start the CANviz web server and (optionally) open a browser."""
+    """Start the CANdamar web server and (optionally) open a browser."""
     _run_serve(
         interface=interface,
         channel=channel,
@@ -197,7 +198,7 @@ def _run_serve(
     )
 
     url = f"http://{host}:{port}"
-    console.print(f"\n  [bold green]CANviz[/]  ->  [link={url}]{url}[/link]")
+    console.print(f"\n  [bold green]CANdamar[/]  ->  [link={url}]{url}[/link]")
     console.print(f"  Interface : [cyan]{interface}[/]", end="")
     if channel:
         console.print(f"  channel=[cyan]{channel}[/]", end="")
@@ -1032,11 +1033,11 @@ app.add_typer(j1939_app, name="j1939")
 
 @j1939_app.command("status")
 def j1939_status(
-    host: Annotated[str, typer.Option("--host", help="CANviz server host")] = "127.0.0.1",
-    port: Annotated[int, typer.Option("--port", help="CANviz server port")] = 8080,
+    host: Annotated[str, typer.Option("--host", help="CANdamar server host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", help="CANdamar server port")] = 8080,
 ) -> None:
     """
-    Show J1939 decoder status from a running CANviz server.
+    Show J1939 decoder status from a running CANdamar server.
 
     Displays mode, PGN database size, active nodes, recent BAM messages,
     and active DM1 fault codes. Requires `canviz serve` to be running.
@@ -1053,7 +1054,7 @@ def j1939_status(
         with urllib.request.urlopen(url, timeout=3) as resp:
             data = json.loads(resp.read())
     except urllib.error.URLError:
-        console.print(f"  [red]Error:[/] Could not reach CANviz at {url}")
+        console.print(f"  [red]Error:[/] Could not reach CANdamar at {url}")
         console.print("  Is [cyan]canviz serve[/] running?")
         raise typer.Exit(code=1)
 

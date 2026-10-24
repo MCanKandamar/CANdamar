@@ -1,21 +1,21 @@
 """
 canviz/desktop.py
 -----------------
-Desktop launcher: runs the CANviz server in a background thread and shows
+Desktop launcher: runs the CANdamar server in a background thread and shows
 the UI in a native window (pywebview, Microsoft Edge WebView2 on Windows).
 This is the entry point of the one-file Windows executable.
 
-  canviz-desktop                 # open the app window
-  canviz-desktop --no-window     # server only (smoke tests, debugging)
+  candamar-desktop                 # open the app window
+  candamar-desktop --no-window     # server only (smoke tests, debugging)
 
 Closing the window stops the server; the FastAPI lifespan shutdown then
 releases the CAN adapter (COM port / USB handle).
 
 Data (recordings, replay uploads, the log file and WebView2 storage) lives
-in %LOCALAPPDATA%\\CANviz on Windows, ~/.canviz elsewhere, or in the folder
-given by the CANVIZ_DATA_DIR environment variable.
+in %LOCALAPPDATA%\\CANdamar on Windows, ~/.candamar elsewhere, or in the folder
+given by the CANDAMAR_DATA_DIR environment variable.
 
-Requires the optional dependency: pip install canviz[desktop]
+Requires the optional dependency: pip install pywebview
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ import threading
 import time
 from pathlib import Path
 
-APP_NAME     = "CANviz"
+APP_NAME     = "CANdamar"
 DEFAULT_PORT = 47800   # fixed, so the page origin (and its saved layout) stays the same
 WEBVIEW2_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
 
@@ -37,18 +37,18 @@ log = logging.getLogger("canviz.desktop")
 
 
 def _data_dir() -> Path:
-    override = os.environ.get("CANVIZ_DATA_DIR")      # portable use / tests
+    override = os.environ.get("CANDAMAR_DATA_DIR")      # portable use / tests
     base = os.environ.get("LOCALAPPDATA")
     if override:
         path = Path(override)
     else:
-        path = Path(base) / APP_NAME if base else Path.home() / ".canviz"
+        path = Path(base) / APP_NAME if base else Path.home() / ".candamar"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def _setup_logging(data_dir: Path) -> Path:
-    log_file = data_dir / "canviz.log"
+    log_file = data_dir / "candamar.log"
     handlers: list[logging.Handler] = [logging.FileHandler(log_file, encoding="utf-8")]
     if sys.stderr is not None:
         handlers.append(logging.StreamHandler())   # started from a console
@@ -107,7 +107,7 @@ def _show_error(message: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="canviz-desktop", description="CANviz desktop app")
+    parser = argparse.ArgumentParser(prog="candamar-desktop", description="CANdamar desktop app")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="local server port")
     parser.add_argument("--no-window", action="store_true", help="run the server only")
     parser.add_argument("--debug", action="store_true",
@@ -135,11 +135,11 @@ def main() -> None:
     thread.start()
 
     if not _wait_until_up(server, thread):
-        _show_error(f"The CANviz server did not start. See the log file:\n{log_file}")
+        _show_error(f"The CANdamar server did not start. See the log file:\n{log_file}")
         sys.exit(1)
 
     url = f"http://127.0.0.1:{port}/"
-    log.info("CANviz server running at %s (data: %s)", url, data_dir)
+    log.info("CANdamar server running at %s (data: %s)", url, data_dir)
 
     try:
         if args.no_window:
@@ -161,7 +161,7 @@ def _run_window(url: str, data_dir: Path, log_file: Path, debug: bool) -> None:
     try:
         import webview
     except ImportError:
-        _show_error("pywebview is not installed: pip install canviz[desktop]")
+        _show_error("pywebview is not installed: pip install pywebview")
         sys.exit(1)
 
     # Recordings (.asc/.csv) and PNG exports are browser downloads
@@ -186,9 +186,9 @@ def _run_window(url: str, data_dir: Path, log_file: Path, debug: bool) -> None:
         import webbrowser
         webbrowser.open(url)
         _show_error(
-            "The CANviz window could not display the app (Microsoft Edge WebView2 problem).\n\n"
-            f"CANviz is open in your web browser instead: {url}\n"
-            "Close the CANviz window to stop it.\n\n"
+            "The CANdamar window could not display the app (Microsoft Edge WebView2 problem).\n\n"
+            f"CANdamar is open in your web browser instead: {url}\n"
+            "Close the CANdamar window to stop it.\n\n"
             f"WebView2 Runtime: {WEBVIEW2_URL}\nLog file: {log_file}"
         )
 
@@ -205,8 +205,8 @@ def _run_window(url: str, data_dir: Path, log_file: Path, debug: bool) -> None:
     except Exception as exc:
         log.exception("WebView failed to start")
         _show_error(
-            "CANviz needs the Microsoft Edge WebView2 Runtime.\n\n"
-            f"Install it from {WEBVIEW2_URL} and start CANviz again.\n\n"
+            "CANdamar needs the Microsoft Edge WebView2 Runtime.\n\n"
+            f"Install it from {WEBVIEW2_URL} and start CANdamar again.\n\n"
             f"Details: {exc}"
         )
 

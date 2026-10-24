@@ -1,13 +1,16 @@
-# CANviz CLI & Headless Guide
+# CANdamar CLI & Headless Guide
 
-CANviz has two modes of operation:
+> The command is `candamar`; `canviz` is installed as an alias, so every
+> `canviz ...` example below works with either name.
+
+CANdamar has two modes of operation:
 
 - **Browser UI** - `canviz serve` starts a local web server and opens your browser. This is the default.
 - **CLI mode** - `canviz monitor`, `canviz capture`, and `canviz decode` run entirely in the terminal - no browser, no server. Designed for SSH sessions, Raspberry Pi, automated test benches, and shell pipelines.
 
 ---
 
-![CANviz cli demo](cli.gif)
+![CANdamar cli demo](cli.gif)
 
 ---
 
@@ -53,7 +56,7 @@ canviz serve --interface gs_usb
 
 **Auto-connect on startup:**
 
-When you pass `--interface` and `--channel`, CANviz automatically POSTs to `/connect` as soon as the server is ready. You land in the browser already live - no need to click Connect in the UI.
+When you pass `--interface` and `--channel`, CANdamar automatically POSTs to `/connect` as soon as the server is ready. You land in the browser already live - no need to click Connect in the UI.
 
 ```bash
 # slcan - connects and opens browser automatically
@@ -73,7 +76,7 @@ canviz serve --interface socketcan --channel can0 --bitrate 250000 --headless
 canviz serve --interface slcan --channel COM9 --bitrate 250000 --headless --j1939
 ```
 
-Use `--headless` when running CANviz over SSH, in Docker, or as part of an automated pipeline where another process will consume the WebSocket stream. The full REST API and `/ws/frames` WebSocket are still available - only the `webbrowser.open()` call is skipped.
+Use `--headless` when running CANdamar over SSH, in Docker, or as part of an automated pipeline where another process will consume the WebSocket stream. The full REST API and `/ws/frames` WebSocket are still available - only the `webbrowser.open()` call is skipped.
 
 **Additional flags:**
 
@@ -347,7 +350,7 @@ Inspect J1939 decoder state from the command line. Requires `canviz serve` to be
 
 ### `canviz j1939 status`
 
-Prints the full J1939 picture from a running CANviz server - decoder mode, PGN database size, live nodes table, BAM log, and active DM1 fault codes.
+Prints the full J1939 picture from a running CANdamar server - decoder mode, PGN database size, live nodes table, BAM log, and active DM1 fault codes.
 
 ```
 canviz j1939 status [--host 127.0.0.1] [--port 8080]
@@ -433,7 +436,7 @@ canviz monitor --interface slcan --channel COM3 --bitrate 250000 --j1939 \
 
 On the Pi:
 ```
-pip install canviz
+pip install "./backend"    # from a CANdamar checkout, see the README
 sudo ip link set can0 up type can bitrate 500000
 canviz monitor --interface socketcan --channel can0 --dbc vehicle.dbc
 ```
@@ -482,7 +485,7 @@ kill $SERVER_PID
 
 ## Shell autocomplete
 
-CANviz uses Typer, which generates shell completion scripts automatically.
+CANdamar uses Typer, which generates shell completion scripts automatically.
 
 **bash:**
 ```

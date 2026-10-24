@@ -3,14 +3,17 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "canviz"
-version = "0.3.1"
-description = "Open-source browser-based CAN bus analyzer"
+name = "candamar"
+version = "0.4.0"
+description = "CAN bus analyzer for slcan adapters and CANopen drives (fork of CANviz)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-authors = [{ name = "Chanchal Dhiman", email = "chanchalv.dhiman@gmail.com" }]
-keywords = ["CAN bus", "automotive", "analyzer", "cantools", "python-can", "J1939", "CANopen"]
+authors = [
+    { name = "Muslum Can Kandamar" },
+    { name = "Chanchal Dhiman", email = "chanchalv.dhiman@gmail.com" },  # original CANviz author
+]
+keywords = ["CAN bus", "automotive", "analyzer", "cantools", "python-can", "J1939", "CANopen", "slcan"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -37,17 +40,20 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage   = "https://github.com/Chanchaldhiman/CANviz"
-Repository = "https://github.com/Chanchaldhiman/CANviz"
-Issues     = "https://github.com/Chanchaldhiman/CANviz/issues"
-Changelog  = "https://github.com/Chanchaldhiman/CANviz/releases"
+Homepage   = "https://github.com/MCanKandamar/CANdamar"
+Repository = "https://github.com/MCanKandamar/CANdamar"
+Issues     = "https://github.com/MCanKandamar/CANdamar/issues"
+Changelog  = "https://github.com/MCanKandamar/CANdamar/releases"
+Upstream   = "https://github.com/Chanchaldhiman/CANviz"
 
 [project.scripts]
+candamar = "canviz.cli:main"
+# Same command under the original name, so CANviz docs and scripts keep working
 canviz = "canviz.cli:main"
 
 [project.gui-scripts]
 # Native window (pywebview) instead of a browser tab; needs the "desktop" extra
-canviz-desktop = "canviz.desktop:main"
+candamar-desktop = "canviz.desktop:main"
 
 [project.optional-dependencies]
 # ISO-TP stack for OBD-II and UDS (Phase 5.3 / 5.4)

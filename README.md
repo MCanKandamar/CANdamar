@@ -1,52 +1,62 @@
-# CANviz
+# CANdamar
 
-**A browser-based CAN bus analyzer. Plug in. One command. Analyze.**
+**A CAN bus analyzer for slcan adapters and CANopen drives -- in your browser or as a Windows app.**
 
-[![CI](https://github.com/Chanchaldhiman/CANviz/actions/workflows/ci.yml/badge.svg)](https://github.com/Chanchaldhiman/CANviz/actions)
-[![PyPI version](https://img.shields.io/pypi/v/canviz.svg)](https://pypi.org/project/canviz/)
-[![Total Downloads](https://img.shields.io/pepy/dt/canviz?label=total%20downloads)](https://pepy.tech/project/canviz)
-[![Monthly Downloads](https://static.pepy.tech/badge/canviz/month)](https://pepy.tech/project/canviz)
-[![Python](https://img.shields.io/pypi/pyversions/canviz.svg)](https://pypi.org/project/canviz/)
+[![CI](https://github.com/MCanKandamar/CANdamar/actions/workflows/ci.yml/badge.svg)](https://github.com/MCanKandamar/CANdamar/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![GitHub Repo stars](https://img.shields.io/github/stars/Chanchaldhiman/CANviz)
 
+CANdamar is a fork of [CANviz](https://github.com/Chanchaldhiman/CANviz) by Chanchal Dhiman. It keeps
+everything CANviz does and adds a tabbed workspace, standard slcan options, a fuller CANopen
+SDO client and a one-file Windows app. Fixes that also help CANviz are offered upstream as
+pull requests.
 
-```bash
-pip install canviz
-canviz
-# browser opens at http://localhost:8080
-```
+![CANdamar demo](docs/demo.gif)
 
-![CANviz demo](docs/demo.gif)
+*(Demo recorded with the original CANviz layout.)*
 
 CAN bus tools are either expensive, locked to proprietary hardware, or require compiling
-from source. CANviz is different: it runs in your browser, installs with one pip command,
-and works with any USB CAN adapter including adapters that cost under $10.
+from source. CANdamar runs locally, needs no account and no internet connection, and works
+with cheap USB CAN adapters -- including STM32 boards running slcan firmware.
 
-No GUI install. No driver setup. No account. No internet connection. Whether you are
-debugging an ECU, commissioning a servo drive, analyzing J1939 truck traffic, or working
-on a robot arm over CANopen, CANviz puts every frame, signal, and protocol event in
-front of you immediately.
+---
+
+## What is new compared to CANviz
+
+- **Workspace tabs** -- Frames, CANopen, J1939 and Plot as Chrome-style tabs; split view shows two side by side
+- **Layout** -- collapsible sidebar (Ctrl+B), bottom panel collapse / maximize, plot that fills its tab
+- **slcan** -- normal / listen-only mode, full S0-S8 bitrate list, COM port list with adapter detection, RTR frames
+- **CANopen SDO** -- segmented reads (e.g. device name), typed writes with byte preview, WRITE OK and decoded abort codes
+- **EDS object browser** -- every object of your EDS (including 0x2000+) with type and access, one-click Read / Write
+- **Plot without a DBC** -- pick a CAN ID, byte range, type, byte order and scale
+- **Windows app** -- `CANdamar.exe`, no Python or Node.js needed
+
+See [CHANGELOG.md](docs/CHANGELOG.md) for details.
 
 ---
 
 ## Install and Run
 
+### Windows app
+
+Download `CANdamar.exe` from the [Releases](https://github.com/MCanKandamar/CANdamar/releases) page and
+double-click it. It needs the Microsoft Edge WebView2 Runtime, which is preinstalled on
+Windows 11. See [packaging/windows](packaging/windows/README.md).
+
+### From source (Windows, Linux, macOS)
+
 ```bash
-pip install canviz
-canviz
+git clone https://github.com/MCanKandamar/CANdamar.git
+cd CANdamar/frontend
+npm ci && npm run build        # builds the UI into backend/canviz/static
+cd ..
+pip install "./backend[desktop]"
+candamar                       # browser UI at http://localhost:8080
+candamar-desktop               # or the same UI in its own window
 ```
 
-That is it. CANviz detects your connected adapter and opens the browser automatically.
-
-### Windows app (no Python needed)
-
-`CANviz.exe` is a single-file Windows build that opens CANviz in its own window
-(Microsoft Edge WebView2, preinstalled on Windows 11). Download it from the
-Releases page, or build it yourself with
-`powershell -ExecutionPolicy Bypass -File packaging\windows\build_exe.ps1`.
-To run the same window from a pip install: `pip install canviz[desktop]` and
-`canviz-desktop`. See [packaging/windows](packaging/windows/README.md).
+Needs Python 3.10+ and Node.js 20+. The `canviz` command is installed too, as an alias
+of `candamar`, so CANviz instructions keep working. CANdamar is not on PyPI yet --
+`pip install canviz` installs the original CANviz.
 
 > **Not sure which interface to select?** See the [Device Guide](docs/interfaceguide.md).
 
@@ -93,14 +103,14 @@ error frames silently; a tooltip explains this when a slcan interface is active.
 
 ### CLI and headless mode
 
-`canviz monitor` renders a live colour-coded table in the terminal over SSH, in CI
+`candamar monitor` renders a live colour-coded table in the terminal over SSH, in CI
 pipelines, and on headless Raspberry Pi setups. See [CLI Reference](#cli-reference).
 
 ---
 
 ## Protocol Decoders
 
-CANviz includes passive decoders for J1939 and CANopen. They run entirely from captured
+CANdamar includes passive decoders for J1939 and CANopen. They run entirely from captured
 traffic -- no extra hardware, no polling, no configuration required beyond enabling the
 decoder in the UI. Each decoder has its own tab in the workspace, next to the message
 table and the plot. Use split view to see a decoder and the live frames side by side.
@@ -196,7 +206,7 @@ proxy with authentication.
 ## CLI Reference
 
 ```
-canviz [OPTIONS]
+candamar [OPTIONS]
 
   --interface   gs_usb | slcan | socketcan | virtual  (default: gs_usb)
   --channel     COM port or SocketCAN channel  (e.g. COM3, can0)
@@ -211,16 +221,16 @@ canviz [OPTIONS]
 
 ```bash
 # Live terminal monitor -- works over SSH
-canviz monitor --interface socketcan --channel can0 --dbc vehicle.dbc
+candamar monitor --interface socketcan --channel can0 --dbc vehicle.dbc
 
 # Capture frames to file
-canviz capture --output trace.json --duration 60
+candamar capture --output trace.json --duration 60
 
 # Decode a captured log
-canviz decode --input trace.json --dbc vehicle.dbc --output decoded.csv
+candamar decode --input trace.json --dbc vehicle.dbc --output decoded.csv
 
 # API-only server, no browser
-canviz serve --headless --port 8080
+candamar serve --headless --port 8080
 ```
 
 See the [CLI Guide](docs/cli.md) for full SSH workflow documentation.
@@ -281,7 +291,7 @@ Full interactive docs at `http://localhost:8080/docs` while running.
 - **High bus load above 2,000 fps** -- untested. A server-side throttling hook is built in and can be enabled if needed.
 - **CAN FD** -- frames with >8 byte payloads display as raw hex. Full CAN FD UI is planned.
 - **slcan error frames** -- slcan firmware silently drops error frames before forwarding. Bus error statistics read 0% on slcan interfaces even on a degraded bus. Use gs_usb for accurate error visibility.
-- **Kvaser on Windows** -- CANviz has full UI support. Connection fails due to a bug in python-can 4.6.1 (`canIoCtlInit` returning `canERR_PARAM`). Tracked at [python-can #2051](https://github.com/hardbyte/python-can/issues/2051). Upgrade python-can once resolved and Kvaser will work without any CANviz changes.
+- **Kvaser on Windows** -- CANdamar has full UI support. Connection fails due to a bug in python-can 4.6.1 (`canIoCtlInit` returning `canERR_PARAM`). Tracked at [python-can #2051](https://github.com/hardbyte/python-can/issues/2051). Upgrade python-can once resolved and Kvaser will work without any CANdamar changes.
 - **CANopen PDO decode** -- requires the device EDS file. Without EDS, TPDO1 bytes 0-1 are decoded as Statusword by default assumption; other PDO bytes are raw hex.
 - **CANopen SDO block transfer / segmented download** -- reads support expedited and segmented upload;
   writes are expedited (1-4 bytes). Segmented transfers between other devices are only logged passively.
@@ -294,19 +304,13 @@ Full interactive docs at `http://localhost:8080/docs` while running.
 
 ## Troubleshooting
 
-**`No matching distribution found for canviz` on Ubuntu / Linux**
-- Use `pip3 install canviz` or `python3 -m pip install canviz`. CANviz requires Python
-  3.10+. Ubuntu 20.04 ships Python 3.8 -- upgrade to 22.04+ or install Python 3.10
-  separately.
-- If still doesn't work then try installing with pipx,
-`sudo apt install pipx`
-`pipx ensurepath`,
-then try
-`pipx install canviz`
+**Install fails on Ubuntu / Linux**
+- CANdamar requires Python 3.10+. Ubuntu 20.04 ships Python 3.8 -- upgrade to 22.04+ or
+  install Python 3.10 separately, then use `python3 -m pip install "./backend[desktop]"`.
 
 **Device shows a COM port on Windows**
 Your adapter is running slcan firmware, not Candlelight.
-Use: `canviz --interface slcan --channel COM3`
+Use: `candamar --interface slcan --channel COM3`
 
 **PEAK PCAN-USB fails to connect**
 Ensure the [PEAK driver](https://www.peak-system.com/Drivers.523.0.html) is installed.
@@ -332,6 +336,8 @@ abort code in the SDO log for the exact reason.
 - [x] Signal plotting, multi-signal overlay, threshold alerts, CLI mode, bus health statistics, multi-frame transmit
 - [x] J1939 passive decoder -- PGN/SA decode, BAM reassembly, DM1 fault decode
 - [x] CANopen CiA 301 + CiA 402 -- NMT, EMCY, SDO, PDO, heartbeat, drive control
+- [x] CANdamar 0.4.0 -- workspace tabs, slcan listen-only, segmented SDO, EDS browser, Windows app
+- [ ] slcan status flags (`F`) -- error passive / bus-off from slcan adapters
 - [ ] CAN FD explicit UI support (>8 byte payloads, FDF/BRS/ESI flags)
 - [ ] OBD-II over raw CAN -- ISO 15765-4, no ELM327 required
 - [ ] UDS diagnostic panel -- ReadDataByIdentifier, ReadDTCInformation, ClearDTC
@@ -342,7 +348,7 @@ abort code in the SDO log for the exact reason.
 
 ## Contributing
 
-CANviz is actively developed. The most useful contribution right now is testing hardware
+CANdamar is actively developed. The most useful contribution right now is testing hardware
 we have not tried -- a CANable 2.0, anything on macOS, anything on a COM port. No code
 required. Open an issue and tell us what happened.
 
@@ -353,8 +359,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get the dev environment runnin
 
 ## Acknowledgements
 
-CANviz is built on the shoulders of excellent open source work. None of this would exist
+CANdamar is built on the shoulders of excellent open source work. None of this would exist
 without:
+
+- **[CANviz](https://github.com/Chanchaldhiman/CANviz)** by Chanchal Dhiman -- the project CANdamar is forked from. The
+  backend, the decoders, the frame table, plotting, recording and replay all come from CANviz.
 
 - **[python-can](https://github.com/hardbyte/python-can)** -- the hardware abstraction layer that makes every CAN adapter work with the same three lines of Python. The most important dependency in the stack.
 - **[cantools](https://github.com/eerimoq/cantools)** -- DBC parsing and signal decoding. Rock-solid, well-maintained, handles every DBC dialect we have thrown at it.
@@ -373,12 +382,13 @@ piece of feedback made the tool better.
 
 ## Support
 
-CANviz is free and open source. If it saves you time or helps your project, consider
-[sponsoring development on GitHub](https://github.com/sponsors/Chanchaldhiman). Every
-sponsorship directly funds hardware for testing new adapters and protocols.
+CANdamar is free and open source. Bug reports and hardware test results are welcome in the
+[issue tracker](https://github.com/MCanKandamar/CANdamar/issues). If CANdamar is useful to you, please also
+consider [sponsoring the original CANviz author](https://github.com/sponsors/Chanchaldhiman).
 
 ---
 
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+MIT -- see [LICENSE](LICENSE). Original CANviz code (c) CANviz Contributors;
+CANdamar changes (c) Muslum Can Kandamar.

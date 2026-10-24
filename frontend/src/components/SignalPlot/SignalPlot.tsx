@@ -358,7 +358,7 @@ export function SignalPlot() {
                 const url = URL.createObjectURL(blob);
                 const a   = document.createElement('a');
                 a.href     = url;
-                a.download = `canviz_${selectedSignals[0]?.split('.')[0] ?? 'plot'}_${Date.now()}.png`;
+                a.download = `candamar_${selectedSignals[0]?.split('.')[0] ?? 'plot'}_${Date.now()}.png`;
                 a.click();
                 URL.revokeObjectURL(url);
               });

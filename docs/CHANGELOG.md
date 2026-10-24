@@ -1,11 +1,15 @@
 # Changelog
 
-All notable changes to CANviz are documented here.
+All notable changes to CANdamar are documented here. Entries before v0.4.0 are
+from [CANviz](https://github.com/Chanchaldhiman/CANviz), which CANdamar is forked from.
 Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## Unreleased
+## v0.4.0 -- CANdamar (fork of CANviz 0.3.1)
+
+First release under the CANdamar name. The Python package is now `candamar`
+(command `candamar`, with `canviz` kept as an alias); the import module is still `canviz`.
 
 ### Added
 - Workspace tabs -- Frames, CANopen, J1939 and Plot are Chrome-style tabs (drag to reorder) with split view to show two side by side; layout is saved

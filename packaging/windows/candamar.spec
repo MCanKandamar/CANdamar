@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for the one-file Windows executable (CANviz.exe).
+PyInstaller spec for the one-file Windows executable (CANdamar.exe).
 
 Build with packaging/windows/build_exe.ps1, which first builds the frontend
 into backend/canviz/static and installs canviz[desktop] + PyInstaller.
@@ -43,13 +43,13 @@ datas = (
     + collect_data_files("pretty_j1939")
     + collect_data_files("cantools")
     + copy_metadata("python-can")            # python-can reads its plugin entry points
-    + copy_metadata("canviz")
+    + copy_metadata("candamar")
 )
 
 binaries = collect_dynamic_libs("libusb") + [(LIBUSB_DLL, ".")]
 
 a = Analysis(  # noqa: F821
-    [f"{HERE}/canviz_desktop.py"],
+    [f"{HERE}/candamar_desktop.py"],
     pathex=[],
     binaries=binaries,
     datas=datas,
@@ -65,9 +65,9 @@ exe = EXE(  # noqa: F821
     a.binaries,
     a.datas,
     [],
-    name="CANviz",
-    icon=f"{HERE}/canviz.ico",
-    console=False,          # windowed app; logs go to %LOCALAPPDATA%\CANviz\canviz.log
+    name="CANdamar",
+    icon=f"{HERE}/candamar.ico",
+    console=False,          # windowed app; logs go to %LOCALAPPDATA%\CANdamar\candamar.log
     upx=False,
     runtime_tmpdir=None,
 )

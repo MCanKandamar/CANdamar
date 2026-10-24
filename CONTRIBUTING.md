@@ -1,6 +1,6 @@
-# Contributing to CANviz
+# Contributing to CANdamar
 
-CANviz is a young project and community input genuinely shapes where it goes. Whether you have five minutes or five hours, there is something useful you can do.
+CANdamar is a young project and community input genuinely shapes where it goes. Whether you have five minutes or five hours, there is something useful you can do.
 
 ---
 
@@ -16,7 +16,7 @@ The validated hardware list is short. The CAN adapter ecosystem is huge. If you 
 | Kvaser Leaf | Config only | Does `--interface kvaser` work? |
 | Vector VN1610 | Config only | Any python-can config gotchas? |
 | Any slcan device on COM port | Untested | `--interface slcan --channel COMx` : does it connect and stream? |
-| Any device on macOS | Untested | Does `pip install canviz && canviz` even start? |
+| Any device on macOS | Untested | Does `candamar` (installed from source) even start? |
 | Any device on Ubuntu / Fedora desktop | Limited | SocketCAN on non-Pi Linux : any quirks? |
 
 You do not need to write any code. Just open a GitHub issue titled `[Hardware] <device name>` and tell us:
@@ -32,14 +32,14 @@ Every confirmed device gets added to the hardware matrix in the README. Your nam
 
 ## Bug reports
 
-If something doesn't work, please tell us. CANviz has been tested on a limited set of hardware and conditions : real-world reports are the only way to find edge cases.
+If something doesn't work, please tell us. CANdamar has been tested on a limited set of hardware and conditions : real-world reports are the only way to find edge cases.
 
 A useful bug report includes:
 
 ```
 OS:            Windows 11 / Raspberry Pi OS / Ubuntu 24.04 / ...
 Python:        python --version
-CANviz:        pip show canviz
+CANdamar:        pip show candamar
 Hardware:      FYSETC UCAN / CANable / PEAK / ...
 Interface:     gs_usb / slcan / socketcan / virtual
 Command run:   canviz --interface ...
@@ -57,7 +57,7 @@ Open an issue and paste it in. Don't worry about formatting it perfectly : the i
 DBC files from real projects (anonymised or synthetic) that expose signal decode issues are extremely useful. If you load a DBC and signals decode incorrectly or the load fails, open an issue with:
 
 - A minimal DBC snippet that reproduces the problem (remove anything proprietary)
-- What CANviz decoded vs what you expected
+- What CANdamar decoded vs what you expected
 
 ---
 
@@ -87,8 +87,8 @@ If you want to write code, these are the open areas:
 No hardware needed for development : the virtual bus handles everything.
 
 ```bash
-git clone https://github.com/yourname/CANviz.git
-cd CANviz
+git clone https://github.com/yourname/CANdamar.git
+cd CANdamar
 
 # Backend
 cd backend

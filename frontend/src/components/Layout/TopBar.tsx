@@ -79,7 +79,7 @@ export function TopBar() {
       {/* Logo */}
       <div style={styles.logo}>
         <span style={styles.logoCanvas}>CAN</span>
-        <span style={styles.logoVas}>viz</span>
+        <span style={styles.logoVas}>damar</span>
       </div>
 
       {/* Connection info */}

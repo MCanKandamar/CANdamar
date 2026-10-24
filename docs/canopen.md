@@ -1,10 +1,10 @@
 # CANopen Decoder Guide
 
-> CANviz v0.3.1 -- CiA 301 (Communication Profile) + CiA 402 (Drive Profile)
+> CANdamar v0.3.1 -- CiA 301 (Communication Profile) + CiA 402 (Drive Profile)
 
 > **Quick start:** Connect → open the **CANopen** tab → click **Enable Decoder**.
 
-![CANviz CANopen Decoder demo](canopendemo.gif)
+![CANdamar CANopen Decoder demo](canopendemo.gif)
 
 ---
 
@@ -65,7 +65,7 @@ state machine state and Statusword:
 - **Quick Stop Active** (amber) -- decelerating
 - **Fault** (red) -- drive in fault state, requires Fault Reset
 
-States annotated with **(default)** mean CANviz assumed the standard CiA 402 TPDO1
+States annotated with **(default)** mean CANdamar assumed the standard CiA 402 TPDO1
 mapping (Statusword in bytes 0-1) without EDS confirmation. Loading the device EDS
 removes this annotation.
 
@@ -154,7 +154,7 @@ Sends an expedited SDO download to a live node. Writes are sent immediately on c
 -- no second confirmation step.
 
 Pick the object **Type** (UNSIGNED8/16/32, INTEGER8/16/32, REAL32) and enter the
-value as a number (decimal, or `0x` hex for the raw bit pattern). CANviz encodes it
+value as a number (decimal, or `0x` hex for the raw bit pattern). CANdamar encodes it
 little-endian, checks the range and shows the exact bytes before sending, e.g.
 INTEGER32 `1500` sends `DC 05 00 00`. **Raw bytes** keeps the old behaviour: 1-4 hex
 bytes, LSB first (`0F 00` for Controlword 0x000F).
@@ -189,7 +189,7 @@ that appears, then click Send.
 
 | Command | CS Byte | Effect |
 |---------|---------|--------|
-| Operational | 0x01 | Node starts PDO transmission, CANviz receives live data |
+| Operational | 0x01 | Node starts PDO transmission, CANdamar receives live data |
 | Pre-Operational | 0x80 | PDOs stop, only SDOs and heartbeats continue |
 | Stop | 0x02 | Node stops all communication except heartbeat |
 | Reset Node | 0x81 | Full application reset (device reboots its firmware) |
@@ -258,7 +258,7 @@ Optional. Enables named PDO signal decode for vendor-specific objects and unlock
 PDO signal plotting.
 
 EDS (Electronic Data Sheet) files are device-specific. They cannot be bundled with
-CANviz due to being vendor-proprietary. Obtain yours from:
+CANdamar due to being vendor-proprietary. Obtain yours from:
 - The device manufacturer's website or support portal
 - The motor/drive commissioning software (often exports EDS)
 - The device itself via LSS (Layer Setting Services) on some devices
@@ -269,13 +269,13 @@ After upload, TPDO signals are decoded to named values and appear in the Plot ta
 signal selector under `CANopen 0x01.Statusword`, `CANopen 0x01.Position Actual Value`
 etc.
 
-**EDS PDO mapping used by CANviz:**
+**EDS PDO mapping used by CANdamar:**
 - TPDO1 = object 0x1A00 (sub 1..N define what is mapped)
 - TPDO2 = object 0x1A01
 - RPDO1 = object 0x1600
 - RPDO2 = object 0x1601
 
-CANviz reads the mapping parameters directly from the EDS defaults (offline decode --
+CANdamar reads the mapping parameters directly from the EDS defaults (offline decode --
 no live SDO read of the device required).
 
 ---
@@ -375,9 +375,9 @@ Full interactive docs at `http://localhost:8080/docs` while running.
 | RxPDO decode | RPDO frames (from master to drive) are captured and typed. Signal decode requires EDS. |
 | CANopen over CAN FD (CiA 1301) | Out of scope. Requires CAN FD hardware (minimum ~$53). |
 | Node ID reassignment via LSS | LSS (Layer Setting Services) is not decoded. Node IDs are assumed fixed. |
-| PDO mapping changes at runtime | If a node dynamically remaps its PDOs via SDO writes, CANviz will continue using the EDS-defined static mapping. |
+| PDO mapping changes at runtime | If a node dynamically remaps its PDOs via SDO writes, CANdamar will continue using the EDS-defined static mapping. |
 | slcan error frame visibility | slcan firmware silently drops error frames before forwarding. EMCY events from the CANopen application layer still appear correctly. |
-| CiA 402 state change validation | After writing a Controlword, CANviz updates the displayed state only when the next TPDO1 frame arrives with the new Statusword. There is no synchronous ACK -- use the SDO log to confirm the write was acknowledged by the node. |
+| CiA 402 state change validation | After writing a Controlword, CANdamar updates the displayed state only when the next TPDO1 frame arrives with the new Statusword. There is no synchronous ACK -- use the SDO log to confirm the write was acknowledged by the node. |
 
 ---
 

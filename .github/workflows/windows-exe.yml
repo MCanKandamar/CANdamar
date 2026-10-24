@@ -1,0 +1,68 @@
+name: Windows exe
+
+# Builds dist/CANviz.exe (one file, WebView2 window) and attaches it to the
+# GitHub release when a version tag is pushed. Run it by hand from the
+# Actions tab to get the exe as a downloadable artifact.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to attach the exe to the release
+
+jobs:
+  build:
+    name: Build CANviz.exe
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build exe
+        shell: pwsh
+        run: ./packaging/windows/build_exe.ps1
+
+      - name: Smoke test (server only, no window)
+        shell: pwsh
+        run: |
+          $env:CANVIZ_DATA_DIR = Join-Path $env:RUNNER_TEMP 'canviz-data'
+          $proc = Start-Process -FilePath dist\CANviz.exe -ArgumentList '--no-window', '--port', '47811' -PassThru
+          try {
+            $ok = $false
+            for ($i = 0; $i -lt 60; $i++) {
+              try { Invoke-RestMethod http://127.0.0.1:47811/status -TimeoutSec 2 | Out-Null; $ok = $true; break }
+              catch { Start-Sleep -Milliseconds 500 }
+            }
+            if (-not $ok) {
+              Get-Content (Join-Path $env:CANVIZ_DATA_DIR 'canviz.log') -ErrorAction SilentlyContinue
+              throw 'CANviz.exe did not start'
+            }
+            $page = Invoke-WebRequest http://127.0.0.1:47811/ -UseBasicParsing
+            if ($page.Content -notmatch 'id="root"') { throw 'Frontend is not served from the exe' }
+            Write-Host 'CANviz.exe serves the API and the frontend'
+          } finally {
+            Get-Process CANviz -ErrorAction SilentlyContinue | Stop-Process -Force
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CANviz-windows
+          path: dist/CANviz.exe
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/CANviz.exe

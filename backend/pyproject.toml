@@ -45,6 +45,10 @@ Changelog  = "https://github.com/Chanchaldhiman/CANviz/releases"
 [project.scripts]
 canviz = "canviz.cli:main"
 
+[project.gui-scripts]
+# Native window (pywebview) instead of a browser tab; needs the "desktop" extra
+canviz-desktop = "canviz.desktop:main"
+
 [project.optional-dependencies]
 # ISO-TP stack for OBD-II and UDS (Phase 5.3 / 5.4)
 uds = [
@@ -55,6 +59,10 @@ uds = [
 re = [
     "numpy>=1.26",
     "scipy>=1.13",
+]
+# Desktop window (canviz-desktop / Windows exe) - Edge WebView2 on Windows
+desktop = [
+    "pywebview>=5.3",
 ]
 dev = [
     "pytest>=8",

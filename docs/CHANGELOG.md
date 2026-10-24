@@ -18,6 +18,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Typed SDO Write -- enter numbers, bytes are encoded little-endian and previewed
 - SDO log shows WRITE OK and decoded abort codes (`abort_code` in transactions)
 - EDS object list (`GET /canopen/eds/objects`) in the Object Dictionary browser, with one-click Read / Write
+- Windows app -- single-file `CANviz.exe` (PyInstaller + WebView2 window, `canviz-desktop` entry point, `desktop` extra); a GitHub Actions workflow builds it on `v*` tags and attaches it to the release
 - ESLint flat config; `npm run lint` now works and runs in CI
 
 ### Changed

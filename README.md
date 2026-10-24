@@ -39,6 +39,15 @@ canviz
 
 That is it. CANviz detects your connected adapter and opens the browser automatically.
 
+### Windows app (no Python needed)
+
+`CANviz.exe` is a single-file Windows build that opens CANviz in its own window
+(Microsoft Edge WebView2, preinstalled on Windows 11). Download it from the
+Releases page, or build it yourself with
+`powershell -ExecutionPolicy Bypass -File packaging\windows\build_exe.ps1`.
+To run the same window from a pip install: `pip install canviz[desktop]` and
+`canviz-desktop`. See [packaging/windows](packaging/windows/README.md).
+
 > **Not sure which interface to select?** See the [Device Guide](docs/interfaceguide.md).
 
 ---

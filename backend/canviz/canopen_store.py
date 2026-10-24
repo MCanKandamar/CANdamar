@@ -416,14 +416,15 @@ def _sdo_description(cmd: int, is_request: bool) -> str:
             return "Upload Response (segmented)"
         if scs == 3:
             return "Download Response"
-        if scs == 1:
-            return "Upload Segment Response"
+        # CiA 301: scs 0 answers an upload segment, scs 1 a download segment
         if scs == 0:
+            return "Upload Segment Response"
+        if scs == 1:
             return "Download Segment Response"
         if scs == 4:
             # Abort Transfer -- this function only receives the command byte.
-            # Full abort code decode (bytes 4-7) is handled in _handle_sdo_response
-            # where the complete frame data is available.
+            # The abort code (bytes 4-7) is added as "abort_code" in
+            # _handle_sdo_response, where the complete frame data is available.
             return "SDO Abort"
         return f"SDO Response (scs={scs})"
 
@@ -1096,6 +1097,8 @@ class CANopenStore:
                     "timestamp":    round(now, 3),
                     "is_abort":     resp_desc == "SDO Abort",
                 }
+                if transaction["is_abort"] and value_int is not None:
+                    transaction["abort_code"] = f"0x{value_int:08X}"
 
                 # Enrich with object name:
                 # 1. Built-in CiA 301/402 dict (works without EDS)
@@ -1125,6 +1128,71 @@ class CANopenStore:
             result["sdo_transaction"] = transaction
 
         return result
+
+    def record_segmented_upload(
+        self,
+        node_id: int,
+        index: int,
+        subindex: int,
+        data: Optional[bytes] = None,
+        abort_code: Optional[int] = None,
+    ) -> None:
+        """
+        Complete the SDO log entry of a segmented upload run by sdo_client.
+
+        Passive pairing only sees the initiate response, so the log first shows
+        "Upload Response (segmented)" with the 4 size bytes. This replaces that
+        placeholder with the full value -- or with the abort -- once the
+        segment transfer has finished.
+        """
+        if self._mode != "on":
+            return
+        from canviz.sdo_client import printable_text
+
+        index_hex = f"0x{index:04X}"
+        with self._lock:
+            entry = next(
+                (t for t in self._recent_sdo[:20]
+                 if t["node_id"] == node_id and t["index"] == index_hex
+                 and t["subindex"] == subindex
+                 and t["response_cmd"] == "Upload Response (segmented)"),
+                None,
+            )
+            if entry is None:
+                entry = {
+                    "node_id":     node_id,
+                    "index":       index_hex,
+                    "subindex":    subindex,
+                    "request_cmd": "Initiate Upload",
+                    "timestamp":   round(time.monotonic(), 3),
+                }
+                obj_info = _builtin_lookup(index, subindex)
+                if obj_info is None and eds_store.loaded:
+                    eds_obj = eds_store.lookup_object(index, subindex)
+                    if eds_obj:
+                        obj_info = {"name": eds_obj.get("name", ""), "unit": ""}
+                if obj_info:
+                    entry["object_name"] = obj_info["name"]
+                    entry["unit"]        = obj_info.get("unit", "")
+                self._recent_sdo = ([entry] + self._recent_sdo)[:50]
+
+            if abort_code is not None:
+                entry.update({
+                    "response_cmd": "SDO Abort",
+                    "data_hex":     abort_code.to_bytes(4, "little").hex(" ").upper(),
+                    "value_int":    abort_code,
+                    "abort_code":   f"0x{abort_code:08X}",
+                    "is_abort":     True,
+                })
+            elif data is not None:
+                entry.update({
+                    "response_cmd": f"Upload Response (segmented, {len(data)}B)",
+                    "data_hex":     data.hex(" ").upper(),
+                    # An integer reading only makes sense for short payloads
+                    "value_int":    int.from_bytes(data, "little") if 0 < len(data) <= 8 else None,
+                    "value_text":   printable_text(data),
+                    "is_abort":     False,
+                })
 
     def _handle_heartbeat(self, node_id: Optional[int], data: bytes, now: float) -> dict:
         if node_id is None:

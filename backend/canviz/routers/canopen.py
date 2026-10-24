@@ -8,7 +8,7 @@ POST /canopen/mode           -- {"mode": "on"} | {"mode": "off"}
 POST /canopen/reset          -- clear all node state
 POST /canopen/eds            -- upload EDS file (multipart)
 DELETE /canopen/eds          -- unload current EDS
-POST /canopen/sdo/read       -- initiate an SDO upload (expedited read) from a node
+POST /canopen/sdo/read       -- read an object from a node (expedited or segmented upload)
 POST /canopen/nmt            -- send an NMT command (with confirmation required by frontend)
 """
 
@@ -90,17 +90,58 @@ async def clear_eds():
     return {"ok": True}
 
 
-# ── SDO read (expedited upload) ───────────────────────────────────────────────
+# ── SDO read (expedited or segmented upload) ──────────────────────────────────
+
+async def _read_object(node_id: int, index: int, subindex: int) -> dict:
+    """
+    Run one SDO upload and describe the outcome. Segmented results (and
+    segmented aborts) are also written into the SDO log, which on its own
+    only sees the initiate response.
+    """
+    from canviz.sdo_client import SdoAbortError, SdoTimeoutError, printable_text, sdo_upload
+
+    where = f"node 0x{node_id:02X}, index 0x{index:04X}:{subindex}"
+    try:
+        result = await sdo_upload(node_id, index, subindex)
+    except SdoAbortError as exc:
+        if exc.segmented or not exc.by_server:
+            canopen_store.record_segmented_upload(node_id, index, subindex, abort_code=exc.code)
+        return {
+            "ok":         False,
+            "abort_code": f"0x{exc.code:08X}",
+            "detail":     f"SDO abort 0x{exc.code:08X} from {where}",
+        }
+    except SdoTimeoutError as exc:
+        if exc.segmented:
+            canopen_store.record_segmented_upload(node_id, index, subindex, abort_code=0x05040000)
+        return {"ok": False, "timeout": True, "detail": str(exc)}
+
+    data = result.data
+    if result.segmented:
+        canopen_store.record_segmented_upload(node_id, index, subindex, data=data)
+    return {
+        "ok":         True,
+        "segmented":  result.segmented,
+        "size":       len(data),
+        "data_hex":   data.hex(" ").upper(),
+        "value_int":  int.from_bytes(data, "little") if 0 < len(data) <= 8 else None,
+        "value_text": printable_text(data),
+        "message":    f"Read {len(data)} byte(s) from {where}",
+    }
+
 
 @router.post("/sdo/read")
 async def sdo_read(req: SdoReadRequest):
     """
-    Initiate an expedited SDO upload from a live node.
+    Read one object from a live node and return its value.
 
-    Constructs and sends the SDO initiate-upload request frame (COB-ID 0x600 + node_id).
-    The response will arrive as a normal CAN frame and be decoded by canopen_store.
-    The completed SDO transaction is visible in GET /canopen/status under recent_sdo.
+    Sends the SDO initiate-upload request (COB-ID 0x600 + node_id) and waits
+    for the answer. Values over 4 bytes (e.g. 0x1008 device name) are read
+    with a segmented upload. The transaction also appears in
+    GET /canopen/status under recent_sdo.
 
+    Response: {ok, data_hex, value_int, value_text, segmented, size}, or
+    {ok: false, abort_code, detail} when the node aborts the transfer.
     Requires an active CAN connection.
     """
     from canviz.bus import bus_manager
@@ -111,31 +152,14 @@ async def sdo_read(req: SdoReadRequest):
     if not (1 <= req.node_id <= 127):
         raise HTTPException(status_code=400, detail="node_id must be 1-127")
 
-    # SDO initiate upload request: command 0x40, index LSB, index MSB, subindex, 0x00*4
-    cob_id = 0x600 + req.node_id
-    cmd    = 0x40   # initiate upload request
-    data   = [
-        cmd,
-        req.index & 0xFF,
-        (req.index >> 8) & 0xFF,
-        req.subindex & 0xFF,
-        0x00, 0x00, 0x00, 0x00,
-    ]
-
     try:
-        await bus_manager.send(
-            arbitration_id=cob_id,
-            data=data,
-            is_extended_id=False,
-        )
+        result = await _read_object(req.node_id, req.index, req.subindex)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Send error: {exc}")
 
-    return {
-        "ok":      True,
-        "message": f"SDO upload request sent to node 0x{req.node_id:02X}, "
-                   f"index 0x{req.index:04X}:{req.subindex}",
-    }
+    if result.get("timeout"):
+        raise HTTPException(status_code=504, detail=result["detail"])
+    return result
 
 
 # ── NMT command ───────────────────────────────────────────────────────────────
@@ -332,16 +356,14 @@ _EXPORT_OBJECTS: list[tuple[int, int, str]] = [
 async def export_node_config(req: ExportRequest):
     """
     Export node configuration by reading standard SDO objects from all
-    discovered nodes. Initiates SDO read requests -- responses will appear
-    in the SDO log as they arrive from each node.
+    discovered nodes, one read at a time.
 
-    Returns the list of requested reads so the caller can track progress.
-    The actual values appear in GET /canopen/status recent_sdo after each
-    node responds.
+    Returns every read with its outcome (value or abort code) under
+    "results"; the values also appear in GET /canopen/status recent_sdo.
 
     Requires an active CAN connection. Node IDs are those discovered via
-    heartbeat frames. Unresponsive nodes will timeout in the SDO pairing
-    window (500ms) and not appear in the log.
+    heartbeat frames. A node that does not answer within the SDO timeout
+    is skipped after its first unanswered read.
     """
     from canviz.bus import bus_manager
 
@@ -359,39 +381,35 @@ async def export_node_config(req: ExportRequest):
         )
 
     reads_sent: list[dict] = []
-    import asyncio
 
+    # Reads run one after another: a node serves one SDO transfer at a time,
+    # and waiting for each answer also completes segmented values (0x1008...).
     for node_id in targets:
         for index, subindex, name in _EXPORT_OBJECTS:
-            cob_id = 0x600 + node_id
-            data   = [
-                0x40,
-                index & 0xFF,
-                (index >> 8) & 0xFF,
-                subindex & 0xFF,
-                0x00, 0x00, 0x00, 0x00,
-            ]
             try:
-                await bus_manager.send(
-                    arbitration_id=cob_id,
-                    data=data,
-                    is_extended_id=False,
-                )
-                reads_sent.append({
-                    "node_id":  node_id,
-                    "index":    f"0x{index:04X}",
-                    "subindex": subindex,
-                    "name":     name,
-                })
-                # 8ms gap between requests to avoid flooding slow nodes
-                await asyncio.sleep(0.008)
+                result = await _read_object(node_id, index, subindex)
             except Exception as exc:
                 log.warning("Export SDO read failed node=0x%02X 0x%04X: %s", node_id, index, exc)
+                continue
+            reads_sent.append({
+                "node_id":  node_id,
+                "index":    f"0x{index:04X}",
+                "subindex": subindex,
+                "name":     name,
+                **result,
+            })
+            if result.get("timeout"):
+                # Node is not answering -- skip its remaining objects
+                log.warning("Export: node 0x%02X did not answer, skipping it", node_id)
+                break
 
+    answered = sum(1 for r in reads_sent if r.get("ok"))
     return {
         "ok":        True,
         "nodes":     targets,
         "reads_sent": len(reads_sent),
-        "message":   f"Sent {len(reads_sent)} SDO read requests across {len(targets)} node(s). "
-                     f"Responses appear in the SDO log as they arrive.",
+        "answered":  answered,
+        "results":   reads_sent,
+        "message":   f"Read {answered} of {len(reads_sent)} objects across {len(targets)} node(s). "
+                     f"Values are in the SDO log.",
     }

@@ -238,6 +238,7 @@ function canopenDetail(co: CANopenInfo): string {
       return `${t.object_name}: ABORT${code !== null ? ` ${formatAbortCode(code)} ${sdoAbortText(code)}` : ''}`;
     }
     if (isSdoWriteResponse(t)) return `${t.object_name}: WRITE OK`;
+    if (t.value_text) return `${t.object_name} = "${t.value_text}"`;
     const val = t.data_hex ?? '';
     return `${t.object_name}${val ? ' = ' + val : ''}`;
   }

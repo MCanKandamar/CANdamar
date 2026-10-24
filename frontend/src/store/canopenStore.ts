@@ -33,6 +33,8 @@ export interface SdoTransaction {
   response_cmd: string;
   data_hex: string;
   value_int: number | null;
+  value_text?: string | null;   // printable payload of a segmented upload (e.g. 0x1008)
+  abort_code?: string;          // "0x06020000" on aborts
   object_name?: string;
   data_type?: string;
   timestamp: number;

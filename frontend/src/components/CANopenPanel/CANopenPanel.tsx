@@ -475,8 +475,11 @@ function SdoValueCell({ r }: { r: SdoTransaction }) {
       </span>
     );
   }
-  if (isSdoWriteResponse(r)) {
+  if (isSdoWriteResponse(r) || isSegmentedPending(r)) {
     return <span style={{ color: 'var(--text-muted)' }}>--</span>;
+  }
+  if (r.value_text) {
+    return <span title={r.data_hex}>"{r.value_text}"</span>;
   }
   return (
     <>
@@ -488,8 +491,15 @@ function SdoValueCell({ r }: { r: SdoTransaction }) {
   );
 }
 
+// Passive pairing logs the initiate response of a segmented upload first;
+// the backend replaces it with the full value when the transfer completes.
+function isSegmentedPending(r: SdoTransaction): boolean {
+  return r.response_cmd === 'Upload Response (segmented)';
+}
+
 function sdoStatus(r: SdoTransaction): { label: string; color: string } {
   if (r.is_abort)           return { label: 'ABORT',    color: 'var(--accent-red)' };
+  if (isSegmentedPending(r)) return { label: 'READING...', color: 'var(--accent-amber)' };
   if (isSdoWriteResponse(r)) return { label: 'WRITE OK', color: 'var(--accent-green)' };
   return { label: 'READ OK', color: 'var(--accent-green)' };
 }
@@ -596,7 +606,17 @@ function SdoReadPanel({ prefillIndex, prefillSub }: SdoReadProps) {
         }),
       });
       const data = await res.json();
-      setResult(data.ok ? 'Sent -- response appears in SDO log above.' : `Error: ${data.detail}`);
+      if (data.ok) {
+        const value = data.value_text != null
+          ? `"${data.value_text}"`
+          : `${data.data_hex}${data.value_int != null ? ` (${data.value_int})` : ''}`;
+        setResult(`Read ${data.size} byte(s)${data.segmented ? ', segmented' : ''}: ${value}`);
+      } else if (data.abort_code) {
+        const code = parseInt(data.abort_code, 16);
+        setResult(`Error: abort ${formatAbortCode(code)} -- ${sdoAbortText(code)}`);
+      } else {
+        setResult(`Error: ${data.detail}`);
+      }
     } catch { setResult('Request failed'); }
     finally { setBusy(false); }
   };
@@ -990,7 +1010,7 @@ function ExportPanel({ nodes }: { nodes: CANopenNode[] }) {
       });
       const data = await res.json();
       setResult(data.ok
-        ? `Sent ${data.reads_sent} SDO reads to ${data.nodes.length} node(s). Check SDO log for values.`
+        ? `Read ${data.answered} of ${data.reads_sent} objects from ${data.nodes.length} node(s). Values are in the SDO log.`
         : `Error: ${data.detail}`);
     } catch { setResult('Request failed'); }
     finally { setBusy(false); }

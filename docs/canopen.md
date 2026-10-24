@@ -33,7 +33,7 @@ any EDS file is loaded.
 ## Quick Start
 
 1. Connect to the CAN bus via the Connection panel.
-2. Open the **CANopen** tab in the right panel.
+2. Open the **CANopen** tab in the workspace tab strip (use split view to keep the frame table visible).
 3. If CANopen traffic is detected, an amber badge appears automatically.
 4. Click **Enable Decoder**.
 5. Nodes appear in the Nodes table within one heartbeat cycle (typically 250-1000 ms).

@@ -46,7 +46,6 @@
 
   /* Sizing */
   --sidebar-width:      280px;
-  --rightpanel-width:   360px;
   --topbar-height:      44px;
   --bottompanel-height: 320px;
   --radius-sm: 3px;
@@ -174,18 +173,18 @@ body {
 .app-shell {
   display: grid;
   grid-template-rows: var(--topbar-height) 1fr var(--bottompanel-height);
-  grid-template-columns: var(--sidebar-width) 1fr var(--rightpanel-width);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   grid-template-areas:
-    "topbar     topbar topbar"
-    "sidebar    main   rightpanel"
-    "sidebar    bottom bottom";
+    "topbar     topbar"
+    "sidebar    main"
+    "sidebar    bottom";
   height: 100vh;
   width: 100vw;
 }
 
 /* Sidebar hidden: the column collapses and the main area takes the space */
 .app-shell.sidebar-collapsed {
-  grid-template-columns: 0 1fr var(--rightpanel-width);
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 .app-shell.sidebar-collapsed .app-sidebar { display: none; }
 
@@ -193,7 +192,6 @@ body {
 .app-sidebar     { grid-area: sidebar; }
 .app-main        { grid-area: main; }
 .app-bottom      { grid-area: bottom; }
-.app-rightpanel  { grid-area: rightpanel; }
 
 /* ============================================================
    Panel base
@@ -443,6 +441,195 @@ body {
 .tab-btn.active {
   color: var(--accent-green);
   border-bottom-color: var(--accent-green);
+}
+
+/* ============================================================
+   Workspace -- Chrome-style tabs + split view
+   ============================================================ */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+/* Stop the panes from swallowing mouse events while the divider is dragged */
+.workspace.resizing .ws-body { cursor: ew-resize; user-select: none; }
+.workspace.resizing .ws-pane { pointer-events: none; }
+
+.ws-strips {
+  display: flex;
+  flex-shrink: 0;
+  background: var(--bg-panel);
+}
+
+.ws-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 6px;
+  overflow: hidden;
+  /* Bottom rule drawn as an inset shadow so the active tab can paint over it */
+  box-shadow: inset 0 -1px 0 var(--border-subtle);
+}
+
+.ws-strip-gap {
+  background: var(--bg-panel);
+  box-shadow: inset 0 -1px 0 var(--border-subtle);
+}
+
+.ws-strip-end {
+  flex: 1;
+  align-self: stretch;
+  min-width: 12px;
+}
+
+.ws-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 180px;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.ws-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.ws-tab.active {
+  background: var(--bg-base);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+/* Accent line on the active tab; muted in the pane that is not focused */
+.ws-tab.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--border-strong);
+}
+.ws-strip.focused .ws-tab.active::before { background: var(--accent-green); }
+
+/* Tab currently shown in the other pane of a split view */
+.ws-tab.elsewhere { color: var(--text-muted); }
+.ws-tab.elsewhere .ws-tab-label { text-decoration: underline dotted; text-underline-offset: 3px; }
+
+.ws-tab.dragging { opacity: 0.4; }
+.ws-tab.drop-before,
+.ws-strip-end.drop-before { box-shadow: inset 2px 0 0 var(--accent-green); }
+
+.ws-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-tab-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  box-shadow: 0 0 4px var(--accent-amber);
+}
+
+.ws-strip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  margin: 0 0 5px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.ws-strip-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.ws-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ws-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ws-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  cursor: ew-resize;
+  user-select: none;
+  transition: background 100ms;
+}
+.ws-divider:hover,
+.ws-divider.dragging { background: var(--accent-green-dim); }
+
+.ws-divider-grip {
+  width: 2px;
+  height: 32px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  pointer-events: none;
+}
+.ws-divider.dragging .ws-divider-grip { background: var(--accent-green); }
+
+/* Scrollable body for panel-style tabs (CANopen, J1939) */
+.ws-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 14px;
+}
+
+/* Plot tab -- the plot stretches to fill the pane */
+.ws-plot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px 14px;
 }
 
 /* ============================================================

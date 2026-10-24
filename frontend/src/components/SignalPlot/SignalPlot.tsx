@@ -186,6 +186,10 @@ export function SignalPlot() {
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={{
+      flex: 1,
+      minHeight: 0,
+      display: 'flex',
+      flexDirection: 'column',
       padding: '12px 16px',
       background: 'var(--bg-elevated)',
       borderRadius: '8px',
@@ -403,11 +407,12 @@ export function SignalPlot() {
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
           onDoubleClick={handleDoubleClick}
-          style={{ cursor: isPaused ? 'zoom-out' : 'crosshair' }}
+          style={{ flex: 1, minHeight: 0, overflow: 'hidden', cursor: isPaused ? 'zoom-out' : 'crosshair' }}
         />
       ) : (
         <div style={{
-          height: '280px',
+          flex: 1,
+          minHeight: 160,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

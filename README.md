@@ -93,8 +93,8 @@ pipelines, and on headless Raspberry Pi setups. See [CLI Reference](#cli-referen
 
 CANviz includes passive decoders for J1939 and CANopen. They run entirely from captured
 traffic -- no extra hardware, no polling, no configuration required beyond enabling the
-decoder in the UI. Both decoders appear in the right-side protocol panel which sits
-alongside the message table and is resizable.
+decoder in the UI. Each decoder has its own tab in the workspace, next to the message
+table and the plot. Use split view to see a decoder and the live frames side by side.
 
 ### J1939
 

@@ -395,7 +395,7 @@ export function MessageTable() {
   const isEmpty = frameList.length === 0;
 
   return (
-    <div className="app-main" style={styles.wrapper}>
+    <div style={styles.wrapper}>
       {/* Header */}
       <div style={styles.header}>
         {table.getHeaderGroups().map((hg) => (
@@ -535,6 +535,8 @@ export function MessageTable() {
 
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
+    flex: 1,
+    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',

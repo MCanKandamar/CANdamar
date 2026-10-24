@@ -1025,7 +1025,7 @@ export function CANopenPanel() {
 
   useEffect(() => { fetchStatus(); }, []);
   useEffect(() => {
-    // Always poll -- panel is permanently mounted in the right column
+    // Always poll -- the workspace keeps this tab mounted once it has been opened
     const t = setInterval(fetchStatus, 2000);
     return () => clearInterval(t);
   }, []);

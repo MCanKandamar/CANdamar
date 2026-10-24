@@ -23,6 +23,7 @@ import csv
 import io
 import os
 import re
+import tempfile
 import time
 from pathlib import Path
 from typing import Optional
@@ -36,8 +37,9 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/replay", tags=["replay"])
 
-# Temporary upload directory — created at startup if missing
-UPLOAD_DIR = Path(os.getenv("canviz_UPLOAD_DIR", "/tmp/canviz_replay"))
+# Temporary upload directory — created at startup if missing.
+# Default is the OS temp folder ("/tmp" would become C:\tmp on Windows).
+UPLOAD_DIR = Path(os.getenv("canviz_UPLOAD_DIR", str(Path(tempfile.gettempdir()) / "canviz_replay")))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 

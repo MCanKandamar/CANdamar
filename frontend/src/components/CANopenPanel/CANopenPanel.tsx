@@ -1195,12 +1195,12 @@ export function CANopenPanel() {
     } catch { /* backend not reachable */ }
   };
 
-  useEffect(() => { fetchStatus(); }, []);
+  useEffect(() => { fetchStatus(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // Always poll -- the workspace keeps this tab mounted once it has been opened
     const t = setInterval(fetchStatus, 2000);
     return () => clearInterval(t);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect whether any discovered node has CiA 402 data
   const has402Nodes = nodes.some((n) => n.cia402_state != null);

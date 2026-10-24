@@ -245,11 +245,11 @@ function Dm1Log({ faults }: { faults: Dm1Fault[] }) {
               {/* Component name + units */}
               <td style={{ ...s.td, fontSize: 11 }}>
                 <span style={{ color: 'var(--text-primary)' }}>
-                  {(f as any).spn_name || <span style={{ color: 'var(--text-muted)' }}>SPN {f.spn}</span>}
+                  {f.spn_name || <span style={{ color: 'var(--text-muted)' }}>SPN {f.spn}</span>}
                 </span>
-                {(f as any).units
+                {f.units
                   ? <span style={{ color: 'var(--text-muted)', marginLeft: 4, fontSize: 10 }}>
-                      {(f as any).units}
+                      {f.units}
                     </span>
                   : null}
               </td>

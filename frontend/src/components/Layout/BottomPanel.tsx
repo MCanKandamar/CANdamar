@@ -19,11 +19,12 @@ const HANDLE_HEIGHT  = 8;
 const TABBAR_HEIGHT  = 37;                 // .tab-btn height + bottom border
 const COLLAPSED_HEIGHT = HANDLE_HEIGHT + TABBAR_HEIGHT;
 const MIN_WORKSPACE  = 140;                // workspace space kept above a maximized panel
-const STORAGE_KEY    = 'canvaz:bottomPanelHeight';
+const STORAGE_KEY    = 'canviz:bottomPanelHeight';
+const OLD_STORAGE_KEY = 'canvaz:bottomPanelHeight';   // key used before the package rename
 
 function loadHeight(): number {
   try {
-    const v = localStorage.getItem(STORAGE_KEY);
+    const v = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(OLD_STORAGE_KEY);
     if (v) return Math.max(MIN_HEIGHT, parseInt(v));
   } catch { /* ignore */ }
   return DEFAULT_HEIGHT;

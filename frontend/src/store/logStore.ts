@@ -42,7 +42,7 @@ interface LogStore {
   setReplayDone: (done: boolean) => void;
 }
 
-// Extract just the filename from a path like "logs/canvaz_20260412_095000.asc"
+// Extract just the filename from a path like "logs/canviz_20260412_095000.asc"
 function basename(filePath: string): string {
   return filePath.split(/[\\/]/).pop() ?? filePath;
 }

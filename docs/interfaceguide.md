@@ -14,7 +14,9 @@ Plug in your adapter, then open **Device Manager** (`Win + X → Device Manager`
   `WinUSB Device`, `Candlelight`, or similar - **no COM port**. Use **gs_usb**.
 
 - **Ports (COM & LPT)** → your adapter shows as `COMx` (e.g. COM3, COM8).
-  Go to Step 2.
+  Go to Step 2. In CANviz the COM Port field lists these ports with their
+  description; known slcan adapters (STM32 Virtual COM Port, CANable slcan)
+  are labelled and selected automatically.
 
 > On Linux/Mac, gs_usb devices appear as `/dev/canX` via SocketCAN.
 > COM port devices appear as `/dev/ttyUSBx` or `/dev/ttyACMx`.

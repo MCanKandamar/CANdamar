@@ -30,6 +30,8 @@ export interface Dm1Fault {
   oc: number;
   cm: number;
   lamps: Record<string, string>;
+  spn_name?: string;   // from the SPN database when available
+  units?: string;
 }
 
 interface J1939Store {

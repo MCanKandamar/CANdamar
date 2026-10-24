@@ -18,10 +18,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Typed SDO Write -- enter numbers, bytes are encoded little-endian and previewed
 - SDO log shows WRITE OK and decoded abort codes (`abort_code` in transactions)
 - EDS object list (`GET /canopen/eds/objects`) in the Object Dictionary browser, with one-click Read / Write
+- ESLint flat config; `npm run lint` now works and runs in CI
 
 ### Changed
 - The right-hand protocol panel is replaced by workspace tabs; Plot moved from the bottom panel to its own tab
 - Read All Node Objects reads one object at a time and skips nodes that do not answer
+- Ruff rule set pinned to the classic defaults so newer ruff releases do not break CI
+- Replay uploads default to the OS temp folder (was `/tmp`, i.e. `C:\tmp` on Windows)
+- API version comes from the package metadata (was hard-coded 0.2.4)
+- Removed sample capture/decode output files (`backend/test.json`, `backend/decode.json`) and the remaining `canvaz` names
 
 ### Fixed
 - Upload / download segment response names were swapped in the SDO decoder

@@ -12,8 +12,8 @@ function readUrlParams(): { idText: string; signalName: string } {
 
 function writeUrlParams(idText: string, signalName: string) {
   const p = new URLSearchParams(window.location.search);
-  idText     ? p.set('id',  idText)     : p.delete('id');
-  signalName ? p.set('sig', signalName) : p.delete('sig');
+  if (idText)     p.set('id', idText);      else p.delete('id');
+  if (signalName) p.set('sig', signalName); else p.delete('sig');
   const search = p.toString();
   const url = search ? `${window.location.pathname}?${search}` : window.location.pathname;
   window.history.replaceState(null, '', url);

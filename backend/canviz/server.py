@@ -6,6 +6,7 @@ Assembles the FastAPI app - mounts all routers, configures CORS
 """
 
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version as package_version
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +40,13 @@ class _SuppressPollLog(logging.Filter):
 
 logging.getLogger("uvicorn.access").addFilter(_SuppressPollLog())
 
+# Single source of truth for the version: pyproject.toml (via package metadata)
+try:
+    __version__ = package_version("canviz")
+except PackageNotFoundError:   # running from a source tree without install
+    __version__ = "0.0.0+unknown"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # startup - connections opened on demand via /connect
@@ -51,7 +59,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="CANviz",
     description="Open-source browser-based CAN bus analyzer",
-    version="0.2.4",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -104,4 +112,4 @@ mount_frontend(app)
 
 @app.get("/")
 async def root():
-    return {"name": "CANviz", "version": "0.2.4", "docs": "/docs"}
+    return {"name": "CANviz", "version": __version__, "docs": "/docs"}

@@ -114,13 +114,13 @@ export function apiGetDbcMessages() {
 
 export interface LogStartResponse {
   ok: boolean;
-  base: string;   // e.g. "canvaz_20260412_095000"
+  base: string;   // e.g. "canviz_20260412_095000"
 }
 
 export interface LogStopResponse {
   ok: boolean;
   frames: number;
-  asc_file: string;  // e.g. "logs/canvaz_20260412_095000.asc"
+  asc_file: string;  // e.g. "logs/canviz_20260412_095000.asc"
   csv_file: string;
 }
 
@@ -134,7 +134,7 @@ export function apiLogStop() {
 }
 
 export function getLogDownloadUrl(filename: string) {
-  // filename = basename only, e.g. "canvaz_20260412_095000.asc"
+  // filename = basename only, e.g. "canviz_20260412_095000.asc"
   return `${BASE}/log/download/${filename}`;
 }
 

@@ -49,7 +49,9 @@ async def connect(req: ConnectRequest):
             channel=channel,
             bitrate=req.bitrate,
             index=index,
-            baudrate=baudrate
+            baudrate=baudrate,
+            # Listen-only is an slcan feature ('L' command); ignored elsewhere
+            listen_only=req.listen_only and req.interface == "slcan",
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -82,5 +84,6 @@ def _status() -> ConnectionStatus:
         channel=settings.channel,
         bitrate=settings.bitrate,
         index=settings.index,
+        listen_only=settings.listen_only,
         error=bus_manager.error,
     )

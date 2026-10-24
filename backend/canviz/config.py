@@ -32,6 +32,9 @@ class CANConfig:
     # Bitrate in bps — must match the bus being sniffed
     bitrate: int = 500_000
 
+    # slcan only: open with 'L' (listen-only / silent) instead of 'O'
+    listen_only: bool = False
+
     # Host / port the HTTP + WS server listens on
     host: str = "127.0.0.1"
     port: int = 8080
@@ -42,7 +45,8 @@ class CANConfig:
             "index": self.index,
             "channel": self.channel,
             "bitrate": self.bitrate,
-            "baudrate": self.baudrate
+            "baudrate": self.baudrate,
+            "listen_only": self.listen_only,
         }
 
 

@@ -135,6 +135,7 @@ export interface ConnectionConfig {
   index?: number;           // gs_usb / kvaser: device index (default 0)
   bitrate: number;          // bps: 125000 | 250000 | 500000 | 1000000
   baudrate : number;        // baudrate for slcan port com
+  listenOnly?: boolean;     // slcan: open with 'L' (listen-only) instead of 'O'
 }
 
 export interface ConnectionState {

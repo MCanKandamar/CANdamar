@@ -28,6 +28,7 @@ class ConnectionStatus(BaseModel):
     channel: str
     bitrate: int
     index: int
+    listen_only: bool = False
     error: Optional[str] = None
 
 
@@ -40,6 +41,8 @@ class ConnectRequest(BaseModel):
     bitrate: int = 500_000
     baudrate: int = 115_200
     index: int = 0
+    # slcan only: open the channel in listen-only (silent) mode with 'L'
+    listen_only: bool = False
 
 
 class SendFrameRequest(BaseModel):

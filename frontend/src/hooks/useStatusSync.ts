@@ -18,6 +18,7 @@ interface StatusResponse {
   bitrate?: number;
   index?: number;
   serial_baudrate?: number;
+  listen_only?: boolean;
 }
 
 export function useStatusSync() {
@@ -40,6 +41,7 @@ export function useStatusSync() {
             channel: data.channel,
             bitrate: data.bitrate ?? 500000,
             index: data.index ?? 0,
+            listenOnly: data.listen_only ?? false,
           });
         }
         // Only flip to connected if we aren't already (avoids flickering)

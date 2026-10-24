@@ -86,6 +86,10 @@ IndexOpt = Annotated[
     int,
     typer.Option("--index", help="gs_usb device index when multiple devices are attached"),
 ]
+ListenOnlyOpt = Annotated[
+    bool,
+    typer.Option("--listen-only", help="slcan only: open the channel in listen-only (silent) mode"),
+]
 DbcOpt = Annotated[
     Optional[Path],
     typer.Option("--dbc", help="Path to a .dbc file for signal decoding"),
@@ -103,6 +107,7 @@ def root(
     index: IndexOpt = 0,
     bitrate: BitrateOpt = 500_000,
     baudrate: BaudrateOpt = 115_200,
+    listen_only: ListenOnlyOpt = False,
     host: Annotated[str, typer.Option("--host", help="Host to bind")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", help="Port to listen on")] = 8080,
     no_browser: Annotated[bool, typer.Option("--no-browser", help="Do not auto-open the browser")] = False,
@@ -127,6 +132,7 @@ def root(
         headless=no_browser,
         log_level=log_level,
         enable_j1939=False,
+        listen_only=listen_only,
     )
 
 
@@ -139,6 +145,7 @@ def serve(
     index: IndexOpt = 0,
     bitrate: BitrateOpt = 500_000,
     baudrate: BaudrateOpt = 115_200,
+    listen_only: ListenOnlyOpt = False,
     host: Annotated[str, typer.Option("--host", help="Host to bind")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", help="Port to listen on")] = 8080,
     headless: Annotated[bool, typer.Option("--headless", help="Start API only - do not open a browser")] = False,
@@ -158,6 +165,7 @@ def serve(
         headless=headless or no_browser,
         log_level=log_level,
         enable_j1939=j1939,
+        listen_only=listen_only,
     )
 
 
@@ -172,6 +180,7 @@ def _run_serve(
     headless: bool,
     log_level: str,
     enable_j1939: bool = False,
+    listen_only: bool = False,
 ) -> None:
     """Shared implementation used by root callback and `serve` subcommand."""
     settings.interface = interface
@@ -194,6 +203,8 @@ def _run_serve(
         console.print(f"  channel=[cyan]{channel}[/]", end="")
     if interface == "gs_usb":
         console.print(f"  index=[cyan]{index}[/]", end="")
+    if listen_only and interface == "slcan":
+        console.print("  mode=[cyan]listen-only[/]", end="")
     console.print(f"  bitrate=[cyan]{bitrate}[/]\n")
 
     if headless:
@@ -222,7 +233,8 @@ def _run_serve(
             "channel":   channel,
             "bitrate":   bitrate,
             "index":     index,
-            "baudrate":  baudrate
+            "baudrate":  baudrate,
+            "listen_only": listen_only,
         }).encode()
         req = urllib.request.Request(
             f"{base}/connect",

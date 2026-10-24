@@ -91,6 +91,7 @@ export function TopBar() {
             {config.interface === 'socketcan' && config.channel ? ` · ${config.channel}` : ''}
             {config.interface === 'gs_usb'  ? ` · idx:${config.index ?? 0}` : ''}
             {` · ${(config.bitrate / 1000).toFixed(0)}k`}
+            {isSlcan && config.listenOnly ? ' · LISTEN-ONLY' : ''}
           </span>
         )}
       </div>

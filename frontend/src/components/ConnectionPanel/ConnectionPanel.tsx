@@ -9,6 +9,19 @@ const BITRATES = [
   { label: '1 Mbps',   value: 1000000 },
 ];
 
+// slcan S0-S8 bitrates as mapped by python-can (S7 is left out: firmwares
+// disagree on whether it means 750 or 800 kbit/s)
+const SLCAN_BITRATES = [
+  { label: '10 kbps (S0)',  value: 10000 },
+  { label: '20 kbps (S1)',  value: 20000 },
+  { label: '50 kbps (S2)',  value: 50000 },
+  { label: '100 kbps (S3)', value: 100000 },
+  { label: '125 kbps (S4)', value: 125000 },
+  { label: '250 kbps (S5)', value: 250000 },
+  { label: '500 kbps (S6)', value: 500000 },
+  { label: '1 Mbps (S8)',   value: 1000000 },
+];
+
 const BAUDRATES = [
   { label: '9.6 kBd',   value: 9600 },
   { label: '19.2 kBd',  value: 19200 },
@@ -114,6 +127,23 @@ export function ConnectionPanel() {
             </select>
 
           </div>
+          <div className="field-group">
+            <label className="field-label">CAN Mode</label>
+            <select
+              className="field-select"
+              value={config.listenOnly ? 'listen' : 'normal'}
+              disabled={isConnected || isBusy}
+              onChange={(e) => setConfig({ listenOnly: e.target.value === 'listen' })}
+            >
+              <option value="normal">Normal (O)</option>
+              <option value="listen">Listen-only (L)</option>
+            </select>
+            <span style={styles.hint}>
+              {config.listenOnly
+                ? 'Silent: the adapter never ACKs or transmits. Sending is disabled.'
+                : 'The adapter ACKs frames and can transmit.'}
+            </span>
+          </div>
         </>
       )}
 
@@ -190,7 +220,7 @@ export function ConnectionPanel() {
             disabled={isConnected || isBusy}
             onChange={(e) => setConfig({ bitrate: parseInt(e.target.value) })}
           >
-            {BITRATES.map((b) => (
+            {(config.interface === 'slcan' ? SLCAN_BITRATES : BITRATES).map((b) => (
               <option key={b.value} value={b.value}>{b.label}</option>
             ))}
           </select>

@@ -35,6 +35,7 @@ export function apiConnect(config: ConnectionConfig) {
     bitrate:          config.bitrate,
     baudrate:         config.baudrate,
     index:            config.index ?? 0,
+    listen_only:      config.interface === 'slcan' && !!config.listenOnly,
   };
 
   return request<{ message: string }>('/connect', {

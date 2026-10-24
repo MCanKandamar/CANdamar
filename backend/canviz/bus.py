@@ -53,6 +53,10 @@ class BusManager:
         self._open_bitrate: int = 0
         self._open_index: int = 0
         self._open_serial_baudrate: int = 0  
+        self._open_listen_only: bool = False
+        # Listen-only (silent) mode: the adapter never transmits or ACKs,
+        # so send() refuses instead of pretending a frame went out.
+        self._listen_only: bool = False
         # Whether the hardware echoes sent frames back through recv() automatically.
         # gs_usb (Candlelight) and virtual do. slcan and seeedstudio do not.
         # When False, send() manually dispatches the frame through callbacks
@@ -80,7 +84,8 @@ class BusManager:
         channel: str = "",
         bitrate: int = 500_000,
         index: int = 0,
-        baudrate: int = 115_200
+        baudrate: int = 115_200,
+        listen_only: bool = False,
     ) -> None:
         if self._connected:
             await self.disconnect()
@@ -96,6 +101,7 @@ class BusManager:
             and self._open_bitrate == bitrate
             and self._open_index == index
             and self._open_serial_baudrate == baudrate
+            and self._open_listen_only == listen_only
         )
 
         if settings_match:
@@ -110,7 +116,7 @@ class BusManager:
 
             try:
                
-                self._bus = _open_bus(interface, channel, bitrate, index, baudrate)
+                self._bus = _open_bus(interface, channel, bitrate, index, baudrate, listen_only)
             except Exception as exc:
                 self._error = str(exc)
                 log.error("Bus open failed: %s", exc)
@@ -121,16 +127,19 @@ class BusManager:
             self._open_bitrate   = bitrate
             self._open_serial_baudrate = baudrate
             self._open_index     = index
+            self._open_listen_only = listen_only
 
         # gs_usb (Candlelight) and virtual echo sent frames back through recv()
         # automatically so they appear in the UI via the reader loop.
         # slcan and seeedstudio do not — send() will echo them manually.
         self._echoes_sent_frames = interface in ("gs_usb", "virtual")
+        self._listen_only = listen_only
 
         settings.interface = interface
         settings.channel   = channel
         settings.bitrate   = bitrate
         settings.index     = index
+        settings.listen_only = listen_only
 
         self._open_time  = time.monotonic()
         self._connected  = True
@@ -138,8 +147,8 @@ class BusManager:
             self._reader_loop(), name="can-reader"
         )
         log.info(
-            "Connected: interface=%s channel=%s bitrate=%d",
-            interface, channel, bitrate,
+            "Connected: interface=%s channel=%s bitrate=%d%s",
+            interface, channel, bitrate, " (listen-only)" if listen_only else "",
         )
 
     async def disconnect(self) -> None:
@@ -187,6 +196,11 @@ class BusManager:
     async def send(self, arbitration_id: int, data: list[int], is_extended_id: bool = False) -> None:
         if not self._connected or self._bus is None:
             raise RuntimeError("Not connected — call /connect first")
+        if self._listen_only:
+            raise RuntimeError(
+                "Listen-only mode: the adapter does not transmit. "
+                "Reconnect in normal mode to send frames."
+            )
         msg = can.Message(
             arbitration_id=arbitration_id,
             data=bytes(data),
@@ -324,6 +338,7 @@ def _open_bus(
     bitrate: int,
     index: int,
     serial_baudrate: int = 115200,
+    listen_only: bool = False,
 ) -> can.BusABC:
     if interface == "gs_usb":
         _ensure_libusb()
@@ -333,8 +348,8 @@ def _open_bus(
         if not channel:
             raise ValueError("slcan requires a channel (e.g. COM3 or /dev/ttyACM0)")
         log.info(
-            "Opening slcan: channel=%s  CAN bitrate=%d bps  serial baud=%d",
-            channel, bitrate, serial_baudrate,
+            "Opening slcan: channel=%s  CAN bitrate=%d bps  serial baud=%d  mode=%s",
+            channel, bitrate, serial_baudrate, "listen-only" if listen_only else "normal",
         )
         # (open) command is sent *inside* can.Bus().__init__(). The settle
         # time must come AFTER the bus is constructed so the adapter has time
@@ -344,8 +359,10 @@ def _open_bus(
             channel=channel,
             bitrate=bitrate,
             ttyBaudrate=serial_baudrate,
+            # Standard LAWICEL: 'L' opens the channel in listen-only mode, 'O' in normal mode
+            listen_only=listen_only,
         )
-        time.sleep(0.25)  # let adapter process O\r before first recv()
+        time.sleep(0.25)  # let adapter process O\r / L\r before first recv()
         return bus
 
     elif interface == "socketcan":
@@ -386,12 +403,13 @@ def open_bus(
     bitrate: int = 500_000,
     index: int = 0,
     serial_baudrate: int = 115200,  
+    listen_only: bool = False,
 ) -> "can.BusABC":
     """
     Public wrapper around _open_bus().
     Used by CLI subcommands (monitor, capture) that bypass FastAPI entirely.
     """
-    return _open_bus(interface, channel, bitrate, index, serial_baudrate)
+    return _open_bus(interface, channel, bitrate, index, serial_baudrate, listen_only)
 
 
 # Singleton

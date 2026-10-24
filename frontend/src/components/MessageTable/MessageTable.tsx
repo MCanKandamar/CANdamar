@@ -10,6 +10,7 @@ import { useFrameStore } from '../../store/frameStore';
 import { useJ1939Store } from '../../store/j1939Store';
 import { useCANopenStore } from '../../store/canopenStore';
 import type { FrameRow, DecodedSignal, CANopenInfo } from '../../types/can';
+import { formatAbortCode, isSdoWriteResponse, sdoAbortCodeOf, sdoAbortText } from '../../utils/sdo';
 
 const FLASH_DURATION_MS = 400;
 const ROW_HEIGHT = 30;
@@ -227,6 +228,11 @@ function canopenDetail(co: CANopenInfo): string {
   // SDO response with paired transaction -- show object name + value
   if (co.sdo_transaction && co.sdo_transaction.object_name) {
     const t = co.sdo_transaction;
+    if (t.is_abort) {
+      const code = sdoAbortCodeOf(t);
+      return `${t.object_name}: ABORT${code !== null ? ` ${formatAbortCode(code)} ${sdoAbortText(code)}` : ''}`;
+    }
+    if (isSdoWriteResponse(t)) return `${t.object_name}: WRITE OK`;
     const val = t.data_hex ?? '';
     return `${t.object_name}${val ? ' = ' + val : ''}`;
   }

@@ -66,6 +66,8 @@ export interface CANopenInfo {
     request_cmd: string;
     response_cmd: string;
     data_hex: string;
+    value_int?: number | null;
+    is_abort?: boolean;
     object_name?: string;
   };
   // NMT-specific

@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCANopenStore } from '../../store/canopenStore';
 import type { CANopenNode, SdoTransaction, EmcyRecord } from '../../store/canopenStore';
+import { formatAbortCode, isSdoWriteResponse, sdoAbortCodeOf, sdoAbortText } from '../../utils/sdo';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -456,6 +457,39 @@ function NodeTable({ nodes }: { nodes: CANopenNode[] }) {
 
 // ── SDO log ───────────────────────────────────────────────────────────────────
 
+function SdoValueCell({ r }: { r: SdoTransaction }) {
+  if (r.is_abort) {
+    const code = sdoAbortCodeOf(r);
+    if (code === null) return <>{r.data_hex || '--'}</>;
+    const text = sdoAbortText(code);
+    return (
+      <span title={`${formatAbortCode(code)} -- ${text}`}>
+        <span style={{ color: 'var(--accent-red)' }}>{formatAbortCode(code)}</span>
+        <span style={{ fontFamily: 'var(--font-ui)', color: 'var(--text-secondary)', marginLeft: 6 }}>
+          {text}
+        </span>
+      </span>
+    );
+  }
+  if (isSdoWriteResponse(r)) {
+    return <span style={{ color: 'var(--text-muted)' }}>--</span>;
+  }
+  return (
+    <>
+      {r.data_hex || '--'}
+      {r.value_int !== null && r.value_int !== undefined && (
+        <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>({r.value_int})</span>
+      )}
+    </>
+  );
+}
+
+function sdoStatus(r: SdoTransaction): { label: string; color: string } {
+  if (r.is_abort)           return { label: 'ABORT',    color: 'var(--accent-red)' };
+  if (isSdoWriteResponse(r)) return { label: 'WRITE OK', color: 'var(--accent-green)' };
+  return { label: 'READ OK', color: 'var(--accent-green)' };
+}
+
 function SdoLog({ records }: { records: SdoTransaction[] }) {
   if (records.length === 0) {
     return <div style={s.muted}>SDO request/response pairs appear here when observed or sent.</div>;
@@ -472,29 +506,29 @@ function SdoLog({ records }: { records: SdoTransaction[] }) {
           </tr>
         </thead>
         <tbody>
-          {records.map((r, i) => (
-            <tr key={i}>
-              <td style={{ ...s.td, ...s.mono, color: 'var(--accent-green)' }}>
-                0x{r.node_id.toString(16).toUpperCase().padStart(2, '0')}
-              </td>
-              <td style={{ ...s.td, ...s.mono }}>{r.index}:{r.subindex}</td>
-              <td style={{
-                ...s.td, color: 'var(--text-secondary)',
-                maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-              }}>
-                {r.object_name || '--'}
-              </td>
-              <td style={{ ...s.td, ...s.mono }}>
-                {r.data_hex || '--'}
-                {r.value_int !== null && r.value_int !== undefined && (
-                  <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>({r.value_int})</span>
-                )}
-              </td>
-              <td style={{ ...s.td, fontSize: 11, color: r.is_abort ? 'var(--accent-red)' : 'var(--accent-green)' }}>
-                {r.is_abort ? 'ABORT' : 'OK'}
-              </td>
-            </tr>
-          ))}
+          {records.map((r, i) => {
+            const status = sdoStatus(r);
+            return (
+              <tr key={i}>
+                <td style={{ ...s.td, ...s.mono, color: 'var(--accent-green)' }}>
+                  0x{r.node_id.toString(16).toUpperCase().padStart(2, '0')}
+                </td>
+                <td style={{ ...s.td, ...s.mono }}>{r.index}:{r.subindex}</td>
+                <td style={{
+                  ...s.td, color: 'var(--text-secondary)',
+                  maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+                }}>
+                  {r.object_name || '--'}
+                </td>
+                <td style={{ ...s.td, ...s.mono }}>
+                  <SdoValueCell r={r} />
+                </td>
+                <td style={{ ...s.td, fontSize: 11, color: status.color, whiteSpace: 'nowrap' as const }}>
+                  {status.label}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

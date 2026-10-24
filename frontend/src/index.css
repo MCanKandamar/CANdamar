@@ -443,6 +443,27 @@ body {
   border-bottom-color: var(--accent-green);
 }
 
+/* Small square icon button used in tab bars (collapse, maximize, ...) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.icon-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
 /* ============================================================
    Workspace -- Chrome-style tabs + split view
    ============================================================ */

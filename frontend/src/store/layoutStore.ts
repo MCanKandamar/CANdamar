@@ -1,8 +1,9 @@
 /**
  * layoutStore.ts
  * --------------
- * UI layout state for the app shell: sidebar visibility and the
- * Chrome-style tab workspace (tab order, split view, active tab per pane).
+ * UI layout state for the app shell: sidebar visibility, bottom panel mode
+ * and the Chrome-style tab workspace (tab order, split view, active tab
+ * per pane).
  * Persists to localStorage so the layout survives a reload.
  *
  * Usage:
@@ -14,6 +15,7 @@ import { create } from 'zustand';
 
 export type WorkspaceTab = 'frames' | 'canopen' | 'j1939' | 'plot';
 export type Pane = 'left' | 'right';
+export type BottomMode = 'normal' | 'collapsed' | 'maximized';
 
 export const WORKSPACE_TABS: { id: WorkspaceTab; label: string }[] = [
   { id: 'frames',  label: 'Frames' },
@@ -31,6 +33,7 @@ const STORAGE_KEY = 'canviz:layout';
 
 interface PersistedLayout {
   sidebarOpen: boolean;
+  bottomMode:  BottomMode;
   tabOrder:    WorkspaceTab[];
   split:       boolean;
   activeTab:   Record<Pane, WorkspaceTab>;
@@ -40,6 +43,7 @@ interface PersistedLayout {
 
 const DEFAULTS: PersistedLayout = {
   sidebarOpen: true,
+  bottomMode:  'normal',
   tabOrder:    TAB_IDS,
   split:       false,
   activeTab:   { left: 'frames', right: 'canopen' },
@@ -70,8 +74,13 @@ function loadLayout(): PersistedLayout {
 
     const split = typeof saved.split === 'boolean' ? saved.split : DEFAULTS.split;
 
+    const bottomModes: BottomMode[] = ['normal', 'collapsed', 'maximized'];
+
     return {
       sidebarOpen: typeof saved.sidebarOpen === 'boolean' ? saved.sidebarOpen : DEFAULTS.sidebarOpen,
+      bottomMode:  bottomModes.includes(saved.bottomMode as BottomMode)
+        ? saved.bottomMode as BottomMode
+        : DEFAULTS.bottomMode,
       tabOrder,
       split,
       activeTab:   { left, right },
@@ -86,6 +95,7 @@ const otherPane = (p: Pane): Pane => (p === 'left' ? 'right' : 'left');
 
 interface LayoutStore extends PersistedLayout {
   toggleSidebar: () => void;
+  setBottomMode: (mode: BottomMode) => void;
   /** Show `tab` in `pane`. In split view, a tab already shown in the other pane swaps over. */
   selectTab:     (pane: Pane, tab: WorkspaceTab) => void;
   /** Reorder: move `tab` in front of `before` (or to the end when `before` is null). */
@@ -102,6 +112,8 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
   ...loadLayout(),
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+
+  setBottomMode: (mode) => set({ bottomMode: mode }),
 
   selectTab: (pane, tab) => {
     const { split, activeTab } = get();
@@ -151,6 +163,7 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
 useLayoutStore.subscribe((s) => {
   const snapshot: PersistedLayout = {
     sidebarOpen: s.sidebarOpen,
+    bottomMode:  s.bottomMode,
     tabOrder:    s.tabOrder,
     split:       s.split,
     activeTab:   s.activeTab,

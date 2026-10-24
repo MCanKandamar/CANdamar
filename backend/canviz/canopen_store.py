@@ -571,6 +571,30 @@ except ImportError:
     pass
 
 
+# CiA 301 data type codes -> names, as used in EDS files (DataType=0x0007 ...)
+_DATA_TYPE_NAMES: dict[int, str] = {
+    0x01: "BOOLEAN",
+    0x02: "INTEGER8",
+    0x03: "INTEGER16",
+    0x04: "INTEGER32",
+    0x05: "UNSIGNED8",
+    0x06: "UNSIGNED16",
+    0x07: "UNSIGNED32",
+    0x08: "REAL32",
+    0x09: "VISIBLE_STRING",
+    0x0A: "OCTET_STRING",
+    0x0B: "UNICODE_STRING",
+    0x0C: "TIME_OF_DAY",
+    0x0D: "TIME_DIFFERENCE",
+    0x0F: "DOMAIN",
+    0x10: "INTEGER24",
+    0x11: "REAL64",
+    0x15: "INTEGER64",
+    0x16: "UNSIGNED24",
+    0x1B: "UNSIGNED64",
+}
+
+
 class EdsStore:
     """
     Wraps a loaded canopen.Network (EDS file).
@@ -782,6 +806,42 @@ class EdsStore:
                 }
             except Exception:
                 return None
+
+    def list_objects(self, query: str = "", limit: int = 200) -> list[dict]:
+        """
+        Every object of the loaded EDS as a flat list (records and arrays are
+        expanded into their sub-entries), filtered by name or hex index.
+        Each entry: {index, subindex, name, data_type, access, default, unit}.
+        """
+        q = query.lower().strip()
+        out: list[dict] = []
+        with self._lock:
+            od = self._get_first_od()
+            if od is None:
+                return out
+            for index in od:            # sorted by index
+                obj = od[index]
+                entries = obj.subindices.values() if hasattr(obj, "subindices") else [obj]
+                for var in entries:
+                    # Sub-entries get "<parent>: <sub name>" so they stay recognisable
+                    name = var.name if var is obj else f"{obj.name}: {var.name}"
+                    index_hex = f"0x{var.index:04X}"
+                    if q and q not in name.lower() and q not in index_hex.lower():
+                        continue
+                    default = getattr(var, "default", None)
+                    out.append({
+                        "index":     index_hex,
+                        "subindex":  var.subindex,
+                        "name":      name,
+                        "data_type": _DATA_TYPE_NAMES.get(var.data_type, f"0x{var.data_type:04X}")
+                                     if var.data_type is not None else "",
+                        "access":    var.access_type or "",
+                        "default":   None if default is None else str(default),
+                        "unit":      var.unit or "",
+                    })
+                    if len(out) >= limit:
+                        return out
+        return out
 
     def _get_first_od(self):
         """Return the object dictionary from the first node in the network."""

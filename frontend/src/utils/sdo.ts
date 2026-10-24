@@ -97,6 +97,23 @@ export const SDO_VALUE_TYPES: { id: SdoValueType; label: string; size: number }[
   { id: 'raw', label: 'Raw bytes',  size: 0 },
 ];
 
+// EDS data type name -> typed SDO write entry (numeric types only)
+const EDS_TYPE_TO_SDO: Record<string, SdoValueType> = {
+  BOOLEAN:    'u8',
+  INTEGER8:   'i8',
+  INTEGER16:  'i16',
+  INTEGER32:  'i32',
+  UNSIGNED8:  'u8',
+  UNSIGNED16: 'u16',
+  UNSIGNED32: 'u32',
+  REAL32:     'f32',
+};
+
+/** Value type for an EDS DataType name, or undefined if it cannot be written expedited. */
+export function sdoValueTypeFor(edsDataType: string): SdoValueType | undefined {
+  return EDS_TYPE_TO_SDO[edsDataType];
+}
+
 export type SdoEncodeResult = { bytes: number[] } | { error: string };
 
 /** Parse "DE AD 01" / "0xDE,0xAD" into 1-4 bytes (the original raw input). */

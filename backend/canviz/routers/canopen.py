@@ -8,6 +8,7 @@ POST /canopen/mode           -- {"mode": "on"} | {"mode": "off"}
 POST /canopen/reset          -- clear all node state
 POST /canopen/eds            -- upload EDS file (multipart)
 DELETE /canopen/eds          -- unload current EDS
+GET  /canopen/eds/objects    -- list objects of the loaded EDS (?q= filter)
 POST /canopen/sdo/read       -- read an object from a node (expedited or segmented upload)
 POST /canopen/nmt            -- send an NMT command (with confirmation required by frontend)
 """
@@ -88,6 +89,19 @@ async def clear_eds():
     """Unload the current EDS file."""
     eds_store.clear()
     return {"ok": True}
+
+
+@router.get("/eds/objects")
+async def list_eds_objects(q: str = ""):
+    """
+    List the objects of the loaded EDS (including manufacturer objects
+    0x2000+), filtered by name or hex index. Each entry carries data_type
+    and access so the UI can offer typed SDO reads and writes.
+    """
+    if not eds_store.loaded:
+        raise HTTPException(status_code=404, detail="No EDS loaded")
+    results = eds_store.list_objects(q)
+    return {"filename": eds_store.filename, "results": results, "total": len(results)}
 
 
 # ── SDO read (expedited or segmented upload) ──────────────────────────────────

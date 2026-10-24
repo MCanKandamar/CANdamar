@@ -21,7 +21,7 @@ import { useCANopenStore } from '../../store/canopenStore';
 import type { CANopenNode, SdoTransaction, EmcyRecord } from '../../store/canopenStore';
 import {
   bytesToHex, encodeSdoValue, formatAbortCode, isSdoWriteResponse,
-  sdoAbortCodeOf, sdoAbortText, SDO_VALUE_TYPES,
+  sdoAbortCodeOf, sdoAbortText, sdoValueTypeFor, SDO_VALUE_TYPES,
 } from '../../utils/sdo';
 import type { SdoValueType } from '../../utils/sdo';
 
@@ -360,8 +360,8 @@ function EdsSection() {
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {edsLoaded
-              ? 'PDO signals are now decoded. Named signals appear in the message table and plot selector.'
-              : 'Optional -- enables named PDO signal decode. Standard CiA 301/402 objects are always named without EDS.'}
+              ? 'PDO signals are now decoded, and every EDS object (including 0x2000+) can be read or written from the Object Dictionary.'
+              : 'Optional -- enables named PDO signal decode and lists the device objects in the Object Dictionary. Standard CiA 301/402 objects are always named without EDS.'}
           </div>
           {!canopenLib && !edsLoaded && (
             <div style={{ fontSize: 10, color: 'var(--accent-amber)', marginTop: 2 }}>
@@ -576,22 +576,50 @@ function EmcyLog({ records }: { records: EmcyRecord[] }) {
   );
 }
 
+// ── SDO read / write shared helpers ──────────────────────────────────────────
+
+/** Object picked in the dictionary browser; `seq` re-triggers the same pick. */
+interface SdoPrefill {
+  index: string;
+  sub:   number;
+  type?: SdoValueType;
+  seq:   number;
+}
+
+/**
+ * Node ID input that follows the first discovered node until the user edits
+ * it, so a single drive on the bus (e.g. node 13) needs no typing.
+ */
+function useNodeIdInput(defaultNodeId?: number) {
+  const [nodeId, setNodeIdRaw] = useState(defaultNodeId ? String(defaultNodeId) : '1');
+  const touched = useRef(false);
+  useEffect(() => {
+    if (!touched.current && defaultNodeId) setNodeIdRaw(String(defaultNodeId));
+  }, [defaultNodeId]);
+  const setNodeId = (v: string) => { touched.current = true; setNodeIdRaw(v); };
+  return [nodeId, setNodeId] as const;
+}
+
 // ── SDO read ──────────────────────────────────────────────────────────────────
 
 interface SdoReadProps {
-  prefillIndex?: string;
-  prefillSub?: number;
+  prefill?: SdoPrefill;
+  defaultNodeId?: number;
 }
 
-function SdoReadPanel({ prefillIndex, prefillSub }: SdoReadProps) {
-  const [nodeId,   setNodeId]   = useState('1');
+function SdoReadPanel({ prefill, defaultNodeId }: SdoReadProps) {
+  const [nodeId,   setNodeId]   = useNodeIdInput(defaultNodeId);
   const [index,    setIndex]    = useState('0x1008');
   const [subindex, setSubindex] = useState('0');
   const [result,   setResult]   = useState<string | null>(null);
   const [busy,     setBusy]     = useState(false);
 
-  useEffect(() => { if (prefillIndex) setIndex(prefillIndex); }, [prefillIndex]);
-  useEffect(() => { if (prefillSub !== undefined) setSubindex(String(prefillSub)); }, [prefillSub]);
+  useEffect(() => {
+    if (!prefill) return;
+    setIndex(prefill.index);
+    setSubindex(String(prefill.sub));
+    setResult(null);
+  }, [prefill]);
 
   const send = async () => {
     setBusy(true); setResult(null);
@@ -651,8 +679,8 @@ function SdoReadPanel({ prefillIndex, prefillSub }: SdoReadProps) {
 
 // ── SDO write (direct, no two-step) ──────────────────────────────────────────
 
-function SdoWritePanel() {
-  const [nodeId,  setNodeId]  = useState('1');
+function SdoWritePanel({ prefill, defaultNodeId }: { prefill?: SdoPrefill; defaultNodeId?: number }) {
+  const [nodeId,  setNodeId]  = useNodeIdInput(defaultNodeId);
   const [index,   setIndex]   = useState('0x6040');
   const [subIdx,  setSubIdx]  = useState('0');
   // Typed entry avoids hand-encoding little-endian bytes (0x6040 is UNSIGNED16)
@@ -663,15 +691,31 @@ function SdoWritePanel() {
   const [busy,    setBusy]    = useState(false);
 
   useEffect(() => {
+    if (!prefill) return;
+    setIndex(prefill.index);
+    setSubIdx(String(prefill.sub));
+    if (prefill.type) setValType(prefill.type);
+    setValue('');
+    setResult(null);
+  }, [prefill]);
+
+  useEffect(() => {
     const t = setTimeout(async () => {
+      type Hit = { index: string; subindex: number; name: string };
+      const q   = '0x' + index.replace(/^0x/i, '').toUpperCase();
+      const sub = parseInt(subIdx) || 0;
+      const exact = (list?: Hit[]) =>
+        list?.find((r) => r.index.toLowerCase() === q.toLowerCase() && r.subindex === sub);
       try {
-        const q    = index.replace(/^0x/i, '').toUpperCase();
-        const res  = await fetch(`/canopen/objects?q=${encodeURIComponent('0x' + q)}`);
+        const res  = await fetch(`/canopen/objects?q=${encodeURIComponent(q)}`);
         const data = await res.json();
-        const sub  = parseInt(subIdx) || 0;
-        const match = (data.results as Array<{index: string; subindex: number; name: string}>)
-          ?.find((r) => r.index.toUpperCase() === ('0x' + q) && r.subindex === sub);
-        setObjName(match?.name ?? data.results?.[0]?.name ?? null);
+        let name = exact(data.results)?.name;
+        // Manufacturer objects (0x2000+) are only named in the EDS
+        if (!name) {
+          const eds = await fetch(`/canopen/eds/objects?q=${encodeURIComponent(q)}`);
+          if (eds.ok) name = exact((await eds.json()).results)?.name;
+        }
+        setObjName(name ?? data.results?.[0]?.name ?? null);
       } catch { setObjName(null); }
     }, 300);
     return () => clearTimeout(t);
@@ -874,53 +918,83 @@ function NmtPanel({ nodes }: { nodes: CANopenNode[] }) {
 }
 
 // ── Object dictionary browser (collapsible) ───────────────────────────────────
+// Two sources: the built-in CiA 301/402 dictionary, or the loaded EDS (which
+// also has the manufacturer objects 0x2000+ with data type and access).
 
-interface OdEntry { index: string; subindex: number; name: string; unit: string; }
+interface OdEntry {
+  index: string;
+  subindex: number;
+  name: string;
+  unit: string;
+  data_type?: string;   // EDS only
+  access?: string;      // EDS only: ro, rw, wo, const, rww, rwr
+}
 
-function ObjectDictionaryBrowser({ onSelect }: { onSelect: (idx: string, sub: number) => void }) {
+type OdSource = 'builtin' | 'eds';
+
+interface OdBrowserProps {
+  onRead:  (idx: string, sub: number) => void;
+  onWrite: (idx: string, sub: number, type: SdoValueType) => void;
+}
+
+function ObjectDictionaryBrowser({ onRead, onWrite }: OdBrowserProps) {
+  const edsLoaded   = useCANopenStore((x) => x.edsLoaded);
+  const edsFilename = useCANopenStore((x) => x.edsFilename);
+
   const [open,    setOpen]    = useState(false);
+  const [source,  setSource]  = useState<OdSource>(edsLoaded ? 'eds' : 'builtin');
   const [query,   setQuery]   = useState('');
   const [results, setResults] = useState<OdEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const lastQ = useRef('');
 
-  const doSearch = async (q: string) => {
+  // Follow EDS upload / removal
+  useEffect(() => { setSource(edsLoaded ? 'eds' : 'builtin'); }, [edsLoaded]);
+
+  const doSearch = async (q: string, src: OdSource) => {
     setLoading(true);
     try {
-      const res  = await fetch(`/canopen/objects?q=${encodeURIComponent(q)}`);
+      const url  = src === 'eds' ? '/canopen/eds/objects' : '/canopen/objects';
+      const res  = await fetch(`${url}?q=${encodeURIComponent(q)}`);
       const data = await res.json();
-      setResults(data.results ?? []);
+      setResults(res.ok ? data.results ?? [] : []);
     } catch { setResults([]); }
     finally { setLoading(false); }
   };
 
   useEffect(() => {
     if (!open) return;
-    if (query === lastQ.current) return;
-    lastQ.current = query;
-    const t = setTimeout(() => doSearch(query), 220);
+    const t = setTimeout(() => doSearch(query, source), 220);
     return () => clearTimeout(t);
-  }, [query, open]);
+  }, [query, open, source, edsFilename]);
 
-  useEffect(() => {
-    if (open && results.length === 0 && !loading) doSearch('');
-  }, [open]);
+  const isEds = source === 'eds';
 
   return (
     <div>
       <div style={s.accordionTrigger} role="button" tabIndex={0}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={(e) => e.key === 'Enter' && setOpen((v) => !v)}>
-        <span>Object Dictionary (CiA 301 + CiA 402 built-in)</span>
+        <span>Object Dictionary</span>
         <span style={{ fontSize: 11 }}>{open ? '▲' : '▼'}</span>
       </div>
 
       {open && (
         <div style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' as const }}>
+            <button className={`btn btn-sm ${!isEds ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setSource('builtin')}>
+              CiA 301 + 402 built-in
+            </button>
+            <button className={`btn btn-sm ${isEds ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setSource('eds')} disabled={!edsLoaded}
+              title={edsLoaded ? undefined : 'Upload an EDS file below to browse its objects'}>
+              EDS{edsFilename ? `: ${edsFilename}` : ''}
+            </button>
+          </div>
           <div style={{ marginBottom: 6 }}>
             <input
               style={{ ...s.input, width: '100%', boxSizing: 'border-box' as const }}
-              placeholder="Search by name or index  e.g. velocity, 6064, 0x6041"
+              placeholder="Search by name or index  e.g. velocity, 6064, 0x2000"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               autoFocus
@@ -931,39 +1005,63 @@ function ObjectDictionaryBrowser({ onSelect }: { onSelect: (idx: string, sub: nu
             <div style={s.muted}>No matches for "{query}"</div>
           )}
           {results.length > 0 && (
-            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            <div style={{ maxHeight: 260, overflowY: 'auto' }}>
               <table style={s.table}>
                 <thead>
                   <tr>
-                    {['Index', 'Name', 'Unit', ''].map((h) => (
+                    {(isEds ? ['Index', 'Name', 'Type', 'Access', ''] : ['Index', 'Name', 'Unit', '']).map((h) => (
                       <th key={h} style={s.th}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map((r, i) => (
-                    <tr key={i}>
-                      <td style={{ ...s.td, ...s.mono, color: 'var(--accent-blue)', whiteSpace: 'nowrap' as const }}>
-                        {r.index}{r.subindex > 0 ? `:${r.subindex}` : ''}
-                      </td>
-                      <td style={{
-                        ...s.td, maxWidth: 150,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
-                      }}>
-                        {r.name}
-                      </td>
-                      <td style={{ ...s.td, color: 'var(--text-muted)', whiteSpace: 'nowrap' as const }}>
-                        {r.unit || '--'}
-                      </td>
-                      <td style={s.td}>
-                        <button className="btn btn-ghost btn-sm"
-                          style={{ fontSize: 10, padding: '1px 6px' }}
-                          onClick={() => onSelect(r.index, r.subindex)}>
-                          Read
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {results.map((r, i) => {
+                    const writeType = r.data_type ? sdoValueTypeFor(r.data_type) : undefined;
+                    const writable  = !!r.access?.includes('w');
+                    return (
+                      <tr key={i}>
+                        <td style={{ ...s.td, ...s.mono, color: 'var(--accent-blue)', whiteSpace: 'nowrap' as const }}>
+                          {r.index}{r.subindex > 0 ? `:${r.subindex}` : ''}
+                        </td>
+                        <td style={{
+                          ...s.td, maxWidth: 220,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const,
+                        }} title={r.name}>
+                          {r.name}
+                        </td>
+                        {isEds ? (
+                          <>
+                            <td style={{ ...s.td, ...s.mono, fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' as const }}>
+                              {r.data_type || '--'}
+                            </td>
+                            <td style={{ ...s.td, ...s.mono, fontSize: 11, color: writable ? 'var(--accent-amber)' : 'var(--text-muted)' }}>
+                              {r.access || '--'}
+                            </td>
+                          </>
+                        ) : (
+                          <td style={{ ...s.td, color: 'var(--text-muted)', whiteSpace: 'nowrap' as const }}>
+                            {r.unit || '--'}
+                          </td>
+                        )}
+                        <td style={{ ...s.td, whiteSpace: 'nowrap' as const }}>
+                          <button className="btn btn-ghost btn-sm"
+                            style={{ fontSize: 10, padding: '1px 6px' }}
+                            onClick={() => onRead(r.index, r.subindex)}>
+                            Read
+                          </button>
+                          {isEds && writable && (
+                            <button className="btn btn-ghost btn-sm"
+                              style={{ fontSize: 10, padding: '1px 6px', marginLeft: 4 }}
+                              disabled={!writeType}
+                              title={writeType ? 'Fill SDO Write with this object and type' : 'Only numeric types can be written here'}
+                              onClick={() => writeType && onWrite(r.index, r.subindex, writeType)}>
+                              Write
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1072,8 +1170,9 @@ export function CANopenPanel() {
   const setMode          = useCANopenStore((x) => x.setMode);
   const isOn = mode === 'on';
 
-  const [sdoPrefillIndex, setSdoPrefillIndex] = useState<string | undefined>();
-  const [sdoPrefillSub,   setSdoPrefillSub]   = useState<number | undefined>();
+  const [readPrefill,  setReadPrefill]  = useState<SdoPrefill>();
+  const [writePrefill, setWritePrefill] = useState<SdoPrefill>();
+  const prefillSeq = useRef(0);
 
   const fetchStatus = async () => {
     try {
@@ -1187,11 +1286,11 @@ export function CANopenPanel() {
 
           {/* 5. SDO READ */}
           <div style={s.sectionHead}>SDO Read</div>
-          <SdoReadPanel prefillIndex={sdoPrefillIndex} prefillSub={sdoPrefillSub} />
+          <SdoReadPanel prefill={readPrefill} defaultNodeId={nodes[0]?.node_id} />
 
           {/* 6. SDO WRITE */}
           <div style={s.sectionHead}>SDO Write</div>
-          <SdoWritePanel />
+          <SdoWritePanel prefill={writePrefill} defaultNodeId={nodes[0]?.node_id} />
 
           {/* 7. NMT */}
           <div style={s.sectionHead}>NMT Commands</div>
@@ -1199,7 +1298,8 @@ export function CANopenPanel() {
 
           {/* 8. OBJECT DICTIONARY -- collapsible */}
           <ObjectDictionaryBrowser
-            onSelect={(idx, sub) => { setSdoPrefillIndex(idx); setSdoPrefillSub(sub); }}
+            onRead={(index, sub) => setReadPrefill({ index, sub, seq: ++prefillSeq.current })}
+            onWrite={(index, sub, type) => setWritePrefill({ index, sub, type, seq: ++prefillSeq.current })}
           />
 
           {/* 9. READ ALL NODE OBJECTS */}

@@ -34,7 +34,7 @@ function dataToHex(data: number[]): string {
 
 export const TRACE_MAX = 10_000;
 
-export type TraceRow = Omit<FrameRow, 'count' | 'rate' | 'lastSeen' | 'flashKey'> & {
+export type TraceRow = Omit<FrameRow, 'count' | 'rate' | 'lastSeen' | 'flashKey' | 'changedAt'> & {
   seq:    number;   // running frame number since the last clear
   timeMs: number;   // arrival time (Date.now())
 };
@@ -130,6 +130,10 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
     const rate = calcRate(numericId, nowMs);
 
     const existing = store.frames.get(numericId);
+    // Bytes that differ from the previous frame of this ID (Monitor highlight)
+    const changedAt = frame.data.map((b, i) =>
+      existing && existing.data[i] !== b ? nowMs : existing?.changedAt?.[i] ?? 0,
+    );
     const updated: FrameRow = {
       id:             numericId,
       idHex:          toHex(numericId, frame.is_extended_id),
@@ -143,6 +147,7 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
       isRemote:       frame.is_remote_frame ?? false,
       isFd:           frame.is_fd,
       flashKey:       nowMs,
+      changedAt,
       decodedSignals: signals,
       j1939:          frame.j1939,   // ← carry J1939 decode through to the table row
       canopen:        frame.canopen,   // ← carry CANopen decode through to the table row

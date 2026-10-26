@@ -905,3 +905,15 @@ body {
 .row-flash {
   animation: row-flash 400ms ease-out forwards;
 }
+
+/* A data byte that changed since the previous frame of its ID */
+@keyframes byte-flash {
+  0%   { color: var(--accent-amber); background: var(--accent-amber-dim); }
+  60%  { color: var(--accent-amber); background: var(--accent-amber-dim); }
+  100% { color: inherit; background: transparent; }
+}
+
+.byte-flash {
+  border-radius: 2px;
+  animation: byte-flash 1500ms ease-out forwards;
+}

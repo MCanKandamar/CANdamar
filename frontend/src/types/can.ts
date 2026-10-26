@@ -115,6 +115,7 @@ export interface FrameRow {
   isRemote?: boolean;
   isFd: boolean;
   flashKey: number;         // bumped on every update, triggers flash
+  changedAt?: number[];     // per data byte: Date.now() ms of its last change, 0 = never
   decodedSignals?: DecodedSignal[];
   j1939?: J1939Info;        // Present when J1939 mode is on and frame is extended
   canopen?: CANopenInfo;        // Present when CANopen mode is on

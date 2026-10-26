@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import { Fragment, useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -82,6 +82,28 @@ function SignalRows({ signals }: { signals: DecodedSignal[] }) {
   );
 }
 
+// ── Data bytes with change highlight ──────────────────────────────────────────
+// A byte that differs from the previous frame of the same ID flashes amber.
+// The span's key includes the change time, so each change restarts the CSS
+// animation; unchanged bytes keep their element and do not flash again.
+function DataBytes({ row }: { row: FrameRow }) {
+  return (
+    <span className="mono" style={styles.dataCell}>
+      {row.data.map((b, i) => {
+        const changed = row.changedAt?.[i] ?? 0;
+        return (
+          <Fragment key={i}>
+            {i > 0 && ' '}
+            <span key={changed} className={changed ? 'byte-flash' : undefined}>
+              {b.toString(16).toUpperCase().padStart(2, '0')}
+            </span>
+          </Fragment>
+        );
+      })}
+    </span>
+  );
+}
+
 // ── Base column definitions (always shown) ────────────────────────────────────
 const BASE_COLUMNS: ColumnDef<FrameRow>[] = [
   {
@@ -119,9 +141,7 @@ const BASE_COLUMNS: ColumnDef<FrameRow>[] = [
         remote request
       </span>
     ) : (
-      <span className="mono" style={styles.dataCell}>
-        {info.getValue<string>()}
-      </span>
+      <DataBytes row={info.row.original} />
     ),
   },
   {

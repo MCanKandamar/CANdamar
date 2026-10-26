@@ -47,7 +47,7 @@
   /* Sizing */
   --sidebar-width:      280px;
   --topbar-height:      44px;
-  --bottompanel-height: 320px;
+  --bottompanel-height: 0px;   /* set by BottomPanel while the bottom pane has tabs */
   --radius-sm: 3px;
   --radius-md: 5px;
   --radius-lg: 8px;

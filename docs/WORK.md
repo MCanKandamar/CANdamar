@@ -34,10 +34,12 @@ E. Monitoring and polish
 - [x] 14. Visual clean-up (shared CSS classes, consistent font sizes, density setting) — verified: tsc + lint + build ✓, tried in browser (built app; Vite dev served a stale index.css). Scope kept small: font-size tokens, no 8/9 px text, .section-label / .hint-text, density toggle in the top bar
 F. Drive
 - [x] 15. Drive Control: mode of operation 0x6060, target velocity 0x60FF, statusword bits shown one by one (drive CANopen phases 4–5) — verified: tsc + lint + build ✓, tried in browser against the simulated node 13; needs HW test once the drive has 0x6041/0x6060/0x60FF (phases 4-5)
-- [ ] 16. Docs + CHANGELOG, v0.5.0 (ask before bump / tag)
+- [ ] (in progress) 16. Docs + CHANGELOG, v0.5.0 (ask before bump / tag) — docs + CHANGELOG "Unreleased" written; waiting for the user: version bump, push, PR, tag
 
 ## Next
-1. After the user's hardware test (2026-10-27): prepare upstream CANviz PR branches cherry-picked from `upstream/main`
+1. Hardware test by the user (2026-10-27): slcan F flags with the STM32F072 adapter, SDO plotting of 0x2000/0x2001 on node 13, Trace at real bus load, layout drag and drop in the exe (WebView2)
+2. Fix: several components fetch without the `/api` prefix (CANopen panel, `useStatusSync`, ...), so they fail under `npm run dev`; use `BASE` from `api/client.ts` everywhere
+3. After the user's hardware test: prepare upstream CANviz PR branches cherry-picked from `upstream/main`
 
 ## Done
 <!-- Newest first, one line each, with evidence label and commit if any. -->

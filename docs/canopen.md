@@ -98,6 +98,17 @@ stored in browser localStorage. A small "safety notice" link resets it if needed
 > will respond to position/velocity/torque commands. Ensure the machine is safe
 > before sending Enable.
 
+**Mode and target velocity.** Below the buttons, *Set mode* writes the mode of
+operation (0x6060, INTEGER8, e.g. 3 = profile velocity) and *Set velocity* writes the
+target velocity (0x60FF, INTEGER32, little-endian: -1500 is sent as `24 FA FF FF`).
+*Zero* writes 0. The drive's answer (WRITE OK or an abort) appears in the SDO log.
+
+**Statusword.** *Read status* reads 0x6041 (statusword) and 0x6061 (mode display)
+by SDO; tick *auto* to read them every 500 ms. These reads stay out of the SDO log.
+All 16 statusword bits are shown, with the drive state they encode, e.g.
+`0x0237` = bits 0, 1, 2, 4, 5, 9 = Operation enabled, voltage on, remote. Fault
+(bit 3), quick stop (bit 5 = 0, active low) and warning (bit 7) are shown in red.
+
 ---
 
 ### EMCY Events
@@ -286,9 +297,17 @@ When an EDS is loaded, CANopen PDO signals feed directly into the same plot stor
 DBC signals. To plot a CANopen signal:
 
 1. Upload your EDS file.
-2. Open the **Plot** tab in the bottom panel.
-3. Click **Add Signal** and select from the CANopen signals (e.g. `CANopen 0x01 > Position Actual Value`).
+2. Open the **Plot** tab.
+3. Tick the signal in the **CANopen PDO** group of the list left of the plot
+   (e.g. `0x01 · Position Actual Value`).
 4. The signal plots live as TPDO frames arrive.
+
+**Without PDOs -- plotting over SDO.** In the Object Dictionary browser (EDS source),
+the **Plot** button of a numeric object reads it from the first discovered node every
+100 ms and plots it (group **SDO**, e.g. `0x0D · Vdc mV`). Values are decoded with the
+EDS data type, so signed objects plot correctly. These periodic reads are kept out of
+the SDO log. Stop with the button again (**Plotting**) or the ■ in the signal list.
+Values of SDO reads made by any other tool on the bus also appear in the SDO group.
 
 Without EDS, the best-effort Statusword decode (bytes 0-1 of TPDO1) is not
 continuously numeric enough for useful plotting. Load an EDS to get position,
@@ -323,7 +342,7 @@ All endpoints are prefixed `/canopen`.
 | POST | `/canopen/reset` | Clear all accumulated state |
 | POST | `/canopen/eds` | Upload EDS / DCF file (multipart form) |
 | DELETE | `/canopen/eds` | Unload current EDS |
-| POST | `/canopen/sdo/read` | `{"node_id": 1, "index": 4104, "subindex": 0}` -- returns `data_hex`, `value_int`, `value_text`, `segmented`, or `abort_code` |
+| POST | `/canopen/sdo/read` | `{"node_id": 1, "index": 4104, "subindex": 0}` -- returns `data_hex`, `value_int`, `value` (decoded with the EDS type), `value_text`, `segmented`, or `abort_code`. Add `"quiet": true` to keep the read out of the SDO log |
 | POST | `/canopen/sdo/write` | `{"node_id": 1, "index": 24640, "subindex": 0, "data": [15, 0], "confirmed": true}` |
 | POST | `/canopen/nmt` | `{"node_id": 0, "command": 1, "confirmed": true}` |
 | GET | `/canopen/objects` | `?q=velocity` -- search built-in object dictionary |
@@ -376,7 +395,7 @@ Full interactive docs at `http://localhost:8080/docs` while running.
 | CANopen over CAN FD (CiA 1301) | Out of scope. Requires CAN FD hardware (minimum ~$53). |
 | Node ID reassignment via LSS | LSS (Layer Setting Services) is not decoded. Node IDs are assumed fixed. |
 | PDO mapping changes at runtime | If a node dynamically remaps its PDOs via SDO writes, CANdamar will continue using the EDS-defined static mapping. |
-| slcan error frame visibility | slcan firmware silently drops error frames before forwarding. EMCY events from the CANopen application layer still appear correctly. |
+| slcan error frame visibility | slcan firmware silently drops error frames before forwarding. EMCY events from the CANopen application layer still appear correctly, and adapters that support the `F` command report the controller state in the top bar. |
 | CiA 402 state change validation | After writing a Controlword, CANdamar updates the displayed state only when the next TPDO1 frame arrives with the new Statusword. There is no synchronous ACK -- use the SDO log to confirm the write was acknowledged by the node. |
 
 ---

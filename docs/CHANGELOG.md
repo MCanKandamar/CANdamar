@@ -6,6 +6,31 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## Unreleased
+
+### Added
+- Tabs in three panes -- main, right and bottom each have their own tabs; Send Frame, Record and Replay are tabs too. Drag a tab to the right or bottom edge of a pane to open a pane there (a shadow shows where it goes); an empty pane closes. Moving a tab keeps its state
+- Frames tab toolbar -- Monitor / Trace views, Pause (freezes the view, frames are still received), Hex / Dec data bytes
+- Trace view -- the last 10,000 frames in arrival order with time, ID, data and protocol info; follows new frames while scrolled to the end
+- Monitor view highlights the data bytes that changed since the previous frame of the same ID
+- Frames table columns can be resized with the mouse (saved; double-click resets); the last column fills the row and holds the badges
+- Plot signal list next to the plot, grouped by source (DBC, CANopen PDO, SDO, Custom), with live values and hints for empty groups
+- Per-signal display scale and unit (saved); signals in mV get a one-click "->V"
+- Plot button in the EDS object list -- reads the object by SDO every 100 ms (decoded with the EDS type) and plots it; values of SDO reads seen on the bus are plotted too
+- `/canopen/sdo/read` returns `value` decoded with the EDS data type and accepts `quiet: true` to keep periodic reads out of the SDO log
+- slcan status flags -- the adapter is asked for `F` once a second; error warning, error passive, bus error / bus-off and overrun are shown in the top bar (other interfaces unchanged)
+- Drive Control -- mode of operation (0x6060), target velocity (0x60FF), statusword (0x6041) bits and state, read once or every 500 ms
+- Send Frame -- optional name per frame, save / load the list as JSON (also kept across restarts), CANopen templates (NMT, node guarding, SYNC, SDO reads, controlword, heartbeat time)
+- Compact density setting (top bar)
+- CI runs on every branch; the Windows build also makes a wheel; releases take their notes from this file
+
+### Changed
+- Serial baud rates are shown as plain numbers (`115200`)
+- Font sizes use shared tokens; nothing smaller than 10 px
+- The layout is saved under a new key; a 0.4.0 layout is carried over
+
+---
+
 ## v0.4.0 -- CANdamar (fork of CANviz 0.3.1)
 
 First release under the CANdamar name. The Python package is now `candamar`

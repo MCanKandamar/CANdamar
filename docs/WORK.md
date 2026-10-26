@@ -14,9 +14,9 @@ Task: Password reset · branch: feature/reset · started: 2026-10-25
 Task: CANdamar 0.5.0 · branch: feature/v0.5.0 (on top of chore/agent-lite-ci) · plan agreed 2026-10-26
 One commit per step; push, tag and release only after asking. The user tests on hardware 2026-10-27.
 A. Frames table
-- [ ] 1. Mouse-resizable columns (TanStack column resizing), saved, double-click = default width
-- [ ] 2. Last data column fills the remaining width; Protocol Info shows in full when it fits, badges inside that column
-- [ ] 3. Baudrate shown as `115200` (plain digits)
+- [x] 1. Mouse-resizable columns (TanStack column resizing), saved, double-click = default width — verified: tsc + lint ✓, tried in browser (virtual bus)
+- [x] 2. Last data column fills the remaining width; Protocol Info shows in full when it fits, badges inside that column — verified: tsc + lint ✓, tried in browser (virtual bus)
+- [x] 3. Baudrate shown as `115200` (plain digits) — verified: tsc + lint ✓, tried in browser (virtual bus)
 B. Plot
 - [ ] 4. Signal list left of the plot, grouped by source (DBC / CANopen PDO / SDO / Custom), filled automatically; short help when empty
 - [ ] 5. Per-signal scale and unit, saved; suggest ×0.001 V for names/units ending in "mV"

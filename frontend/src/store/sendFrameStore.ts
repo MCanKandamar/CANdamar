@@ -1,3 +1,11 @@
+/**
+ * sendFrameStore.ts
+ * -----------------
+ * The Send Frame list: frames sent once or on a timer. The list (without
+ * the running state) is kept in localStorage, and can be saved to and loaded
+ * from a JSON file so test sequences can be reused and shared.
+ */
+
 import { create } from 'zustand';
 import { apiSendFrame } from '../api/client';
 
@@ -9,6 +17,7 @@ const uid = () => `f_${++counter}_${Date.now()}`;
 
 export interface TransmitFrame {
   id:         string;   // internal key
+  name:       string;   // optional label, e.g. "Enable operation"
   canId:      string;   // "0x123"
   dlc:        number;
   data:       string;   // "FF 00 3C ..."
@@ -20,13 +29,53 @@ export interface TransmitFrame {
   error:      string | null;
 }
 
-function makeFrame(): TransmitFrame {
+/** The parts of a frame that are saved (no running state or feedback). */
+export type SavedFrame = Pick<TransmitFrame, 'name' | 'canId' | 'dlc' | 'data' | 'isExtended' | 'isRemote' | 'intervalMs'>;
+
+function makeFrame(init: Partial<SavedFrame> = {}): TransmitFrame {
   return {
-    id: uid(), canId: '0x123', dlc: 8,
+    id: uid(), name: '', canId: '0x123', dlc: 8,
     data: '00 00 00 00 00 00 00 00',
     isExtended: false, isRemote: false, intervalMs: 100,
+    ...init,
     isRunning: false, lastSent: null, error: null,
   };
+}
+
+const STORAGE_KEY = 'canviz:sendFrames';
+const FILE_FORMAT = 'candamar-send-list';
+
+function toSaved(f: TransmitFrame): SavedFrame {
+  const { name, canId, dlc, data, isExtended, isRemote, intervalMs } = f;
+  return { name, canId, dlc, data, isExtended, isRemote, intervalMs };
+}
+
+/** Frames from a saved list, or null when it is not a valid list. */
+function fromSaved(list: unknown): TransmitFrame[] | null {
+  if (!Array.isArray(list)) return null;
+  const frames: TransmitFrame[] = [];
+  for (const raw of list) {
+    const f = raw as Partial<SavedFrame>;
+    if (typeof f?.canId !== 'string' || !Number.isInteger(f.dlc) || f.dlc! < 0 || f.dlc! > 8) return null;
+    frames.push(makeFrame({
+      name:       typeof f.name === 'string' ? f.name : '',
+      canId:      f.canId,
+      dlc:        f.dlc,
+      data:       typeof f.data === 'string' ? f.data : '',
+      isExtended: !!f.isExtended,
+      isRemote:   !!f.isRemote,
+      intervalMs: Number.isFinite(f.intervalMs) ? Math.max(0, f.intervalMs!) : 0,
+    }));
+  }
+  return frames;
+}
+
+function loadFrames(): TransmitFrame[] {
+  try {
+    const frames = fromSaved(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null'));
+    if (frames && frames.length) return frames;
+  } catch { /* ignore */ }
+  return [makeFrame()];
 }
 
 function parseId(s: string): number | null {
@@ -66,18 +115,22 @@ async function doSend(f: TransmitFrame): Promise<string> {
 
 interface SendFrameStore {
   frames:      TransmitFrame[];
-  addFrame:    () => void;
+  addFrame:    (init?: Partial<SavedFrame>) => void;
   removeFrame: (id: string) => void;
   updateFrame: (id: string, patch: Partial<TransmitFrame>) => void;
   sendOnce:    (id: string) => Promise<void>;
   toggleTimer: (id: string) => void;
   stopAll:     () => void;
+  /** The list as JSON text for a file */
+  exportList:  () => string;
+  /** Replace the list with the frames of a saved file; returns an error text or null */
+  importList:  (text: string) => string | null;
 }
 
 export const useSendFrameStore = create<SendFrameStore>((set, get) => ({
-  frames: [makeFrame()],
+  frames: loadFrames(),
 
-  addFrame: () => set((s) => ({ frames: [...s.frames, makeFrame()] })),
+  addFrame: (init) => set((s) => ({ frames: [...s.frames, makeFrame(init)] })),
 
   removeFrame: (id) => {
     if (timers.has(id)) { clearInterval(timers.get(id)!); timers.delete(id); }
@@ -127,4 +180,28 @@ export const useSendFrameStore = create<SendFrameStore>((set, get) => ({
     timers.clear();
     set((s) => ({ frames: s.frames.map((f) => ({ ...f, isRunning: false })) }));
   },
+
+  exportList: () =>
+    JSON.stringify({ format: FILE_FORMAT, version: 1, frames: get().frames.map(toSaved) }, null, 2),
+
+  importList: (text) => {
+    let frames: TransmitFrame[] | null = null;
+    try {
+      const doc = JSON.parse(text);
+      frames = fromSaved(Array.isArray(doc) ? doc : doc?.frames);
+    } catch { /* not JSON */ }
+    if (!frames) return 'Not a Send Frame list (JSON with a "frames" array)';
+    get().stopAll();
+    set({ frames: frames.length ? frames : [makeFrame()] });
+    return null;
+  },
 }));
+
+// Keep the list across reloads (only what is saved to files, never "running")
+let savedJson = '';
+useSendFrameStore.subscribe((s) => {
+  const json = JSON.stringify(s.frames.map(toSaved));
+  if (json === savedJson) return;
+  savedJson = json;
+  try { localStorage.setItem(STORAGE_KEY, json); } catch { /* ignore */ }
+});

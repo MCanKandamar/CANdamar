@@ -30,7 +30,7 @@ E. Monitoring and polish
 - [x] 10. Trace mode (time-ordered stream, pause, last 10k frames) — verified: tsc + lint + build ✓, tried in browser (follows the end, pause freezes Monitor and Trace)
 - [x] 11. Highlight changed bytes in Monitor mode — verified: tsc + lint + build ✓, tried in browser
 - [x] 12. Pause + hex/dec switch — verified: tsc + lint + build ✓, tried in browser (pause came with step 10; this step adds Hex/Dec)
-- [ ] 13. Save / load Send Frame lists + CANopen templates
+- [x] 13. Save / load Send Frame lists + CANopen templates — verified: tsc + lint + build ✓, tried in browser against the simulated node 13 (templates answered, file load / bad file)
 - [ ] 14. Visual clean-up (shared CSS classes, consistent font sizes, density setting)
 F. Drive
 - [ ] 15. Drive Control: mode of operation 0x6060, target velocity 0x60FF, statusword bits shown one by one (drive CANopen phases 4–5)

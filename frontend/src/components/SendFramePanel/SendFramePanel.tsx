@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useSendFrameStore } from '../../store/sendFrameStore';
+import { useCANopenStore } from '../../store/canopenStore';
+import { CANOPEN_TEMPLATES } from '../../utils/canopenTemplates';
 
 const DLC_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8];
 
@@ -8,6 +10,84 @@ function rateLabel(ms: number): string {
   if (ms <= 0) return '';
   const hz = 1000 / ms;
   return hz >= 1 ? `${hz % 1 === 0 ? hz : hz.toFixed(1)} Hz` : `${(1 / hz).toFixed(1)} s`;
+}
+
+/** Save / load the list and add CANopen templates for a node */
+function ListToolbar() {
+  const exportList = useSendFrameStore((s) => s.exportList);
+  const importList = useSendFrameStore((s) => s.importList);
+  const addFrame   = useSendFrameStore((s) => s.addFrame);
+  const firstNode  = useCANopenStore((s) => s.nodes[0]?.node_id);
+
+  const [node, setNode]       = useState('');
+  const [message, setMessage] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Node for templates: what the user typed, else the first node seen on the bus
+  const nodeId = parseInt(node) || firstNode || 1;
+
+  const save = () => {
+    const blob = new Blob([exportList()], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'candamar-send-list.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const load = async (file: File | undefined) => {
+    if (!file) return;
+    const error = importList(await file.text());
+    setMessage(error ?? `Loaded ${file.name}`);
+  };
+
+  const addTemplate = (i: number) => {
+    const t = CANOPEN_TEMPLATES[i];
+    if (!t) return;
+    addFrame({ name: `${t.label} -- node ${nodeId}`, isExtended: false, isRemote: false, ...t.build(nodeId) });
+  };
+
+  const groups = [...new Set(CANOPEN_TEMPLATES.map((t) => t.group))];
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
+      <button className="btn btn-ghost btn-sm" onClick={save} title="Save this list to a JSON file">Save list</button>
+      <button className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()}
+        title="Replace this list with a saved JSON file">Load list</button>
+      <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }}
+        onChange={(e) => { void load(e.target.files?.[0]); e.target.value = ''; }} />
+      <span style={{ width: 1, height: 16, background: 'var(--border-default)', margin: '0 4px' }} />
+      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>CANopen template</span>
+      <select
+        className="field-select"
+        style={{ width: 'auto', fontSize: 11, padding: '2px 6px' }}
+        value=""
+        onChange={(e) => addTemplate(parseInt(e.target.value))}
+      >
+        <option value="">+ add...</option>
+        {groups.map((g) => (
+          <optgroup key={g} label={g}>
+            {CANOPEN_TEMPLATES.map((t, i) => t.group === g && <option key={i} value={i}>{t.label}</option>)}
+          </optgroup>
+        ))}
+      </select>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>node</span>
+      <input
+        className="field-input"
+        style={{ width: 44, fontSize: 11, padding: '2px 6px' }}
+        value={node}
+        placeholder={String(firstNode ?? 1)}
+        onChange={(e) => setNode(e.target.value)}
+        title="Node ID (1-127) for templates; empty = first node seen on the bus"
+      />
+      {message && (
+        <span style={{ fontSize: 11, color: message.startsWith('Loaded') ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+          {message}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function SendFramePanel() {
@@ -37,6 +117,8 @@ export function SendFramePanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
 
+      <ListToolbar />
+
       {/* Column headers */}
       <div style={{ display: 'grid', ...gridStyle, color: 'var(--text-muted)', fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', padding: '0 2px' }}>
         <span>CAN ID</span>
@@ -54,6 +136,15 @@ export function SendFramePanel() {
           background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)',
           border: `1px solid ${f.isRunning ? 'var(--accent-green)' : 'var(--border-subtle)'}`,
           padding: '5px 7px', transition: 'border-color 0.2s' }}>
+
+          {/* Optional name */}
+          <input
+            style={{ ...inp, border: 'none', background: 'transparent', padding: '0 2px', fontSize: 10,
+              fontFamily: 'var(--font-ui)', color: f.name ? 'var(--text-secondary)' : 'var(--text-muted)' }}
+            value={f.name}
+            placeholder="name (optional)"
+            onChange={(e) => updateFrame(f.id, { name: e.target.value })}
+          />
 
           {/* Input row */}
           <div style={{ display: 'grid', ...gridStyle, alignItems: 'center', gap: 5 }}>
@@ -139,11 +230,11 @@ export function SendFramePanel() {
               <input
                 style={{ ...inp, width: 52 }}
                 type="number"
-                min={10}
+                min={0}
                 max={60000}
                 value={f.intervalMs}
-                onChange={(e) => updateFrame(f.id, { intervalMs: parseInt(e.target.value) || 100 })}
-                title="Interval in milliseconds"
+                onChange={(e) => updateFrame(f.id, { intervalMs: Math.max(0, parseInt(e.target.value) || 0) })}
+                title="Interval in milliseconds (0 = send by hand only)"
               />
               <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                 ms{f.intervalMs > 0 ? ` · ${rateLabel(f.intervalMs)}` : ''}
@@ -205,7 +296,7 @@ export function SendFramePanel() {
 
       {/* Add frame button */}
       <button
-        onClick={addFrame}
+        onClick={() => addFrame()}
         style={{
           background: 'none',
           border: '1px dashed var(--border-default)',

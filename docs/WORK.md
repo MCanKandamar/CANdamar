@@ -27,9 +27,9 @@ C. Tabs
 D. slcan status
 - [x] 9. slcan: poll `F` once a second, show error warning / passive, bus-off, overrun in the top bar (python-can's slcan driver ignores `Fxx` lines; small subclass; other interfaces unchanged) — verified: pytest (31) + ruff ✓, tsc + lint + build ✓, tried end to end with a fake TCP slcan adapter (socket://); needs HW test
 E. Monitoring and polish
-- [ ] 10. Trace mode (time-ordered stream, pause, last 10k frames)
-- [ ] 11. Highlight changed bytes in Monitor mode
-- [ ] 12. Pause + hex/dec switch
+- [x] 10. Trace mode (time-ordered stream, pause, last 10k frames) — verified: tsc + lint + build ✓, tried in browser (follows the end, pause freezes Monitor and Trace)
+- [x] 11. Highlight changed bytes in Monitor mode — verified: tsc + lint + build ✓, tried in browser
+- [x] 12. Pause + hex/dec switch — verified: tsc + lint + build ✓, tried in browser (pause came with step 10; this step adds Hex/Dec)
 - [ ] 13. Save / load Send Frame lists + CANopen templates
 - [ ] 14. Visual clean-up (shared CSS classes, consistent font sizes, density setting)
 F. Drive

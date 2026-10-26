@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useFrameStore } from '../../store/frameStore';
-import { useFrameViewStore } from '../../store/frameViewStore';
+import { useFrameViewStore, formatByte } from '../../store/frameViewStore';
 import { TraceTable } from './TraceTable';
 import { useJ1939Store } from '../../store/j1939Store';
 import { useCANopenStore } from '../../store/canopenStore';
@@ -87,6 +87,7 @@ function SignalRows({ signals }: { signals: DecodedSignal[] }) {
 // The span's key includes the change time, so each change restarts the CSS
 // animation; unchanged bytes keep their element and do not flash again.
 function DataBytes({ row }: { row: FrameRow }) {
+  const radix = useFrameViewStore((s) => s.radix);
   return (
     <span className="mono" style={styles.dataCell}>
       {row.data.map((b, i) => {
@@ -95,7 +96,7 @@ function DataBytes({ row }: { row: FrameRow }) {
           <Fragment key={i}>
             {i > 0 && ' '}
             <span key={changed} className={changed ? 'byte-flash' : undefined}>
-              {b.toString(16).toUpperCase().padStart(2, '0')}
+              {formatByte(b, radix)}
             </span>
           </Fragment>
         );
@@ -321,6 +322,8 @@ export function MessageTable() {
   const paused      = useFrameViewStore((s) => s.paused);
   const setView     = useFrameViewStore((s) => s.setView);
   const togglePause = useFrameViewStore((s) => s.togglePause);
+  const radix       = useFrameViewStore((s) => s.radix);
+  const setRadix    = useFrameViewStore((s) => s.setRadix);
 
   return (
     <div style={styles.wrapper}>
@@ -334,6 +337,10 @@ export function MessageTable() {
             title="Every frame in time order (last 10,000)">
             Trace
           </button>
+        </div>
+        <div className="seg" title="Data bytes in hexadecimal or decimal">
+          <button className={`seg-btn${radix === 'hex' ? ' active' : ''}`} onClick={() => setRadix('hex')}>Hex</button>
+          <button className={`seg-btn${radix === 'dec' ? ' active' : ''}`} onClick={() => setRadix('dec')}>Dec</button>
         </div>
         <button className={`seg-btn solo${paused ? ' active warn' : ''}`} onClick={togglePause}
           title={paused ? 'Resume the live view' : 'Freeze the view -- frames are still received and recorded'}>
@@ -732,6 +739,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     color: 'var(--text-primary)',
     letterSpacing: '0.04em',
+    whiteSpace: 'pre',      // keeps the padding of decimal bytes
   },
   timeCell: {
     fontSize: 10,

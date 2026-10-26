@@ -13,7 +13,7 @@ import {
   useFrameStore, traceSnapshot, traceVersion, traceStart, parseIdFilter, TRACE_MAX,
   type TraceRow,
 } from '../../store/frameStore';
-import { useFrameViewStore } from '../../store/frameViewStore';
+import { useFrameViewStore, formatByte } from '../../store/frameViewStore';
 import { canopenDetail, canopenTypeColor } from '../../utils/canopenDisplay';
 
 const ROW_HEIGHT = 22;
@@ -39,6 +39,7 @@ function infoOf(row: TraceRow): { text: string; color?: string } {
 
 export function TraceTable() {
   const paused = useFrameViewStore((s) => s.paused);
+  const radix  = useFrameViewStore((s) => s.radix);
   const idText = useFrameStore((s) => s.filter.idText);
 
   const [rows, setRows] = useState<TraceRow[]>(traceSnapshot);
@@ -117,8 +118,10 @@ export function TraceTable() {
                     {r.idHex}
                   </span>
                   <span className="mono" style={{ ...styles.cell, width: 36, color: 'var(--text-secondary)' }}>{r.dlc}</span>
-                  <span className="mono" style={{ ...styles.cell, width: 200 }}>
-                    {r.isRemote ? <span style={{ color: 'var(--text-muted)' }}>remote request</span> : r.dataHex}
+                  <span className="mono" style={{ ...styles.cell, width: 200, whiteSpace: 'pre' }}>
+                    {r.isRemote
+                      ? <span style={{ color: 'var(--text-muted)' }}>remote request</span>
+                      : radix === 'hex' ? r.dataHex : r.data.map((b) => formatByte(b, radix)).join(' ')}
                   </span>
                   <span style={{ ...styles.cell, flex: 1, color: info.color ?? 'var(--text-secondary)' }} title={info.text}>
                     {info.text}

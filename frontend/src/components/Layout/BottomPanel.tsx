@@ -1,22 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { SendFramePanel } from '../SendFramePanel/SendFramePanel';
-import { LogControls } from '../LogControls/LogControls';
-import { ReplayPanel } from '../ReplayPanel/ReplayPanel';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useLayoutStore, canMoveTo } from '../../store/layoutStore';
+import { TabStrip, PaneBody, CloseIcon } from '../Workspace/Workspace';
 
-// The signal plot moved to its own workspace tab (see Workspace.tsx)
-const TABS = [
-  { id: 'send',   label: 'Send Frame' },
-  { id: 'log',    label: 'Record' },
-  { id: 'replay', label: 'Replay' },
-] as const;
-
-type TabId = typeof TABS[number]['id'];
+// The bottom pane of the tab layout: its tabs (Send Frame, Record, Replay by
+// default, plus any tab dropped here) use the same strip and body as the
+// workspace panes. This component adds the height handle and collapse /
+// maximize; it is only rendered while the bottom pane has tabs.
 
 const MIN_HEIGHT     = 160;
 const DEFAULT_HEIGHT = 300;
 const HANDLE_HEIGHT  = 8;
-const TABBAR_HEIGHT  = 37;                 // .tab-btn height + bottom border
+const TABBAR_HEIGHT  = 36;                 // .ws-strip height
 const COLLAPSED_HEIGHT = HANDLE_HEIGHT + TABBAR_HEIGHT;
 const MIN_WORKSPACE  = 140;                // workspace space kept above a maximized panel
 const STORAGE_KEY    = 'canviz:bottomPanelHeight';
@@ -62,12 +56,13 @@ function MaximizeIcon({ restore }: { restore: boolean }) {
 }
 
 export function BottomPanel() {
-  const [activeTab, setActiveTab] = useState<TabId>('send');
   const [height, setHeight]       = useState<number>(loadHeight);
   const [viewportH, setViewportH] = useState<number>(window.innerHeight);
   const [dragging, setDragging]   = useState(false);
   const mode          = useLayoutStore((s) => s.bottomMode);
   const setBottomMode = useLayoutStore((s) => s.setBottomMode);
+  const closePane     = useLayoutStore((s) => s.closePane);
+  const closable      = useLayoutStore((s) => s.panes.bottom.every((t) => canMoveTo(t, 'main')));
   const dragStartY = useRef(0);
   const dragStartH = useRef(0);
 
@@ -88,6 +83,11 @@ export function BottomPanel() {
   useEffect(() => {
     document.documentElement.style.setProperty('--bottompanel-height', `${effectiveHeight}px`);
   }, [effectiveHeight]);
+
+  // No bottom pane: give its grid row back to the workspace
+  useEffect(() => () => {
+    document.documentElement.style.setProperty('--bottompanel-height', '0px');
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, String(height)); } catch { /* ignore */ }
@@ -118,9 +118,8 @@ export function BottomPanel() {
   const toggleCollapsed = () => setBottomMode(mode === 'collapsed' ? 'normal' : 'collapsed');
   const toggleMaximized = () => setBottomMode(mode === 'maximized' ? 'normal' : 'maximized');
 
-  const onTabClick = (id: TabId) => {
-    setActiveTab(id);
-    // Clicking a tab of a collapsed panel opens it again
+  // Clicking a tab of a collapsed panel opens it again
+  const onStripClick = () => {
     if (mode === 'collapsed') setBottomMode('normal');
   };
 
@@ -140,47 +139,36 @@ export function BottomPanel() {
         <div style={styles.handleGrip} />
       </div>
 
-      {/* Tab bar */}
-      <div className="tab-bar" style={{ alignItems: 'center' }}>
-        {TABS.map((tab) => (
+      {/* Tab strip */}
+      <div onClickCapture={onStripClick} style={{ display: 'flex', flexShrink: 0 }}>
+        <TabStrip pane="bottom" style={{ flex: 1 }}>
           <button
-            key={tab.id}
-            className={`tab-btn ${activeTab === tab.id && mode !== 'collapsed' ? 'active' : ''}`}
-            onClick={() => onTabClick(tab.id)}
-            style={{ position: 'relative' }}
+            className="ws-strip-btn"
+            onClick={toggleMaximized}
+            title={mode === 'maximized' ? 'Restore panel' : 'Maximize panel'}
+            aria-label={mode === 'maximized' ? 'Restore panel' : 'Maximize panel'}
           >
-            {tab.label}
-
+            <MaximizeIcon restore={mode === 'maximized'} />
           </button>
-        ))}
-
-        <div style={{ flex: 1 }} />
-
-        <button
-          className="icon-btn"
-          onClick={toggleMaximized}
-          title={mode === 'maximized' ? 'Restore panel' : 'Maximize panel'}
-          aria-label={mode === 'maximized' ? 'Restore panel' : 'Maximize panel'}
-        >
-          <MaximizeIcon restore={mode === 'maximized'} />
-        </button>
-        <button
-          className="icon-btn"
-          onClick={toggleCollapsed}
-          title={mode === 'collapsed' ? 'Expand panel' : 'Collapse panel'}
-          aria-label={mode === 'collapsed' ? 'Expand panel' : 'Collapse panel'}
-          style={{ marginRight: 8 }}
-        >
-          <ChevronIcon up={mode === 'collapsed'} />
-        </button>
+          <button
+            className="ws-strip-btn"
+            onClick={toggleCollapsed}
+            title={mode === 'collapsed' ? 'Expand panel' : 'Collapse panel'}
+            aria-label={mode === 'collapsed' ? 'Expand panel' : 'Collapse panel'}
+          >
+            <ChevronIcon up={mode === 'collapsed'} />
+          </button>
+          {closable && (
+            <button className="ws-strip-btn" onClick={() => closePane('bottom')}
+              title="Close this pane -- its tabs go back to the main pane" aria-label="Close this pane">
+              <CloseIcon />
+            </button>
+          )}
+        </TabStrip>
       </div>
 
       {/* Content -- hidden, not unmounted, while collapsed */}
-      <div style={{ ...styles.content, display: mode === 'collapsed' ? 'none' : 'block' }}>
-        {activeTab === 'send'   && <SendFramePanel />}
-        {activeTab === 'log'    && <LogControls />}
-        {activeTab === 'replay' && <ReplayPanel />}
-      </div>
+      <PaneBody pane="bottom" style={{ flex: 1, display: mode === 'collapsed' ? 'none' : undefined }} />
     </div>
   );
 }
@@ -211,10 +199,5 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 2,
     background: 'var(--border-strong)',
     pointerEvents: 'none',
-  },
-  content: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '10px 14px',
   },
 };

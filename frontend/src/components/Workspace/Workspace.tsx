@@ -1,28 +1,36 @@
 /**
  * Workspace.tsx
  * -------------
- * Main working area with Chrome-style tabs: frame table, CANopen and J1939
- * decoders, and the signal plot. Replaces the old fixed right-hand
- * protocol panel so every view gets the full width of the window.
+ * Chrome-style tabs in three panes: main, right and bottom (see
+ * layoutStore.ts). The main and right panes share the workspace area with a
+ * draggable divider (double-click resets it to 50/50); the bottom pane is
+ * BottomPanel.tsx, which reuses TabStrip and PaneBody from here.
  *
- * - Tabs can be reordered by dragging them along the strip.
- * - Split view shows two tabs side by side. The divider is draggable
- *   (double-click resets it to 50/50). Dragging a tab onto the other
- *   pane's strip shows it in that pane.
- * - A tab is mounted the first time it is shown and then kept alive
- *   (hidden with display:none), so scroll positions, form inputs and
- *   decoder sub-tabs survive tab switches. All tab bodies are siblings
- *   in one flex row and are positioned only with CSS `order`, so moving
- *   a tab between panes never remounts it.
+ * - Tabs are reordered by dragging them along a strip, and moved to another
+ *   pane by dropping them on its strip or its content.
+ * - While a tab is dragged, the content areas show drop zones: the right
+ *   edge of the main pane opens the right pane, the bottom edge of the main
+ *   or right pane moves the tab to the bottom pane. A shadow shows where the
+ *   tab will go. A pane left empty closes.
+ * - A tab is mounted the first time it is shown and then kept alive. Each
+ *   tab body is rendered (through a portal) into its own DOM element, and
+ *   that element is moved between panes, so moving a tab never remounts it:
+ *   scroll positions, form inputs and sub-tabs survive.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MessageTable } from '../MessageTable/MessageTable';
 import { CANopenPanel } from '../CANopenPanel/CANopenPanel';
 import { J1939Panel } from '../J1939Panel/J1939Panel';
 import { SignalPlot } from '../SignalPlot/SignalPlot';
-import { useLayoutStore, WORKSPACE_TABS } from '../../store/layoutStore';
-import type { Pane, WorkspaceTab } from '../../store/layoutStore';
+import { SendFramePanel } from '../SendFramePanel/SendFramePanel';
+import { LogControls } from '../LogControls/LogControls';
+import { ReplayPanel } from '../ReplayPanel/ReplayPanel';
+import {
+  useLayoutStore, PANES, tabLabel, paneOf, canMoveTo,
+  type PaneId, type TabId,
+} from '../../store/layoutStore';
 import { useJ1939Store } from '../../store/j1939Store';
 import { useCANopenStore } from '../../store/canopenStore';
 
@@ -30,6 +38,7 @@ import { useCANopenStore } from '../../store/canopenStore';
 const DRAG_MIME = 'application/x-canviz-tab';
 
 const DIVIDER_PX = 6;
+const EDGE_ZONE  = 0.3;   // outer 30 % of a pane's content opens a pane there
 
 // ── Icons ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +52,7 @@ function SplitIcon() {
   );
 }
 
-function CloseIcon() {
+export function CloseIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -53,63 +62,76 @@ function CloseIcon() {
   );
 }
 
+// ── Drag helpers ─────────────────────────────────────────────────────────────
+
+function draggedTab(e: React.DragEvent): TabId | null {
+  if (!e.dataTransfer.types.includes(DRAG_MIME)) return null;
+  // The payload itself is only readable on drop; the store knows the tab
+  return useLayoutStore.getState().draggingTab;
+}
+
+/** Whether dropping `tab` into `pane` changes anything that is allowed. */
+function dropAllowed(tab: TabId, pane: PaneId): boolean {
+  const { panes } = useLayoutStore.getState();
+  if (!canMoveTo(tab, pane)) return false;
+  // The last tab of the main pane stays there
+  return !(paneOf(panes, tab) === 'main' && pane !== 'main' && panes.main.length === 1);
+}
+
 // ── Tab strip ────────────────────────────────────────────────────────────────
 
 interface TabStripProps {
-  pane: Pane;
-  style: React.CSSProperties;
-  showSplitButton: boolean;
+  pane: PaneId;
+  style?: React.CSSProperties;
+  /** Buttons at the right end of the strip */
+  children?: React.ReactNode;
 }
 
-function TabStrip({ pane, style, showSplitButton }: TabStripProps) {
-  const tabOrder    = useLayoutStore((s) => s.tabOrder);
-  const split       = useLayoutStore((s) => s.split);
-  const activeTab   = useLayoutStore((s) => s.activeTab);
-  const focusedPane = useLayoutStore((s) => s.focusedPane);
-  const selectTab   = useLayoutStore((s) => s.selectTab);
-  const moveTab     = useLayoutStore((s) => s.moveTab);
-  const openSplit   = useLayoutStore((s) => s.openSplit);
-  const closePane   = useLayoutStore((s) => s.closePane);
+export function TabStrip({ pane, style, children }: TabStripProps) {
+  const tabs           = useLayoutStore((s) => s.panes[pane]);
+  const active         = useLayoutStore((s) => s.active[pane]);
+  const focusedPane    = useLayoutStore((s) => s.focusedPane);
+  const draggingTab    = useLayoutStore((s) => s.draggingTab);
+  const selectTab      = useLayoutStore((s) => s.selectTab);
+  const moveTab        = useLayoutStore((s) => s.moveTab);
+  const setDraggingTab = useLayoutStore((s) => s.setDraggingTab);
 
   // Amber dot: protocol traffic seen while its decoder is still off
   const j1939Dot   = useJ1939Store((s) => s.autoDetected && s.mode === 'off');
   const canopenDot = useCANopenStore((s) => s.autoDetected && s.mode === 'off');
-  const dotFor = (tab: WorkspaceTab) =>
+  const dotFor = (tab: TabId) =>
     (tab === 'canopen' && canopenDot) || (tab === 'j1939' && j1939Dot);
 
-  const [dragTab, setDragTab]   = useState<WorkspaceTab | null>(null);
-  const [dropOver, setDropOver] = useState<WorkspaceTab | 'end' | null>(null);
+  const [dropOver, setDropOver] = useState<TabId | 'end' | null>(null);
 
-  const otherTab = split ? activeTab[pane === 'left' ? 'right' : 'left'] : null;
-
-  const onDragStart = (e: React.DragEvent, tab: WorkspaceTab) => {
-    e.dataTransfer.setData(DRAG_MIME, `${pane}:${tab}`);
+  const onDragStart = (e: React.DragEvent, tab: TabId) => {
+    e.dataTransfer.setData(DRAG_MIME, tab);
     e.dataTransfer.effectAllowed = 'move';
-    setDragTab(tab);
+    // Defer so the browser takes the drag image before the drop zones appear
+    setTimeout(() => setDraggingTab(tab), 0);
   };
 
-  const onDragOver = (e: React.DragEvent, target: WorkspaceTab | 'end') => {
-    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+  const onDragOver = (e: React.DragEvent, target: TabId | 'end') => {
+    const tab = draggedTab(e);
+    if (!tab || !dropAllowed(tab, pane)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     if (dropOver !== target) setDropOver(target);
   };
 
-  const onDrop = (e: React.DragEvent, target: WorkspaceTab | 'end') => {
-    const payload = e.dataTransfer.getData(DRAG_MIME);
+  const onDrop = (e: React.DragEvent, target: TabId | 'end') => {
+    const tab = e.dataTransfer.getData(DRAG_MIME) as TabId;
     setDropOver(null);
-    if (!payload) return;
+    setDraggingTab(null);
+    if (!tab) return;
     e.preventDefault();
     e.stopPropagation();
-    const [fromPane, tab] = payload.split(':') as [Pane, WorkspaceTab];
-    moveTab(tab, target === 'end' ? null : target);
-    // Dropped on the other pane's strip: show the tab there
-    if (split && fromPane !== pane) selectTab(pane, tab);
+    moveTab(tab, pane, target === 'end' ? null : target);
   };
 
   const classes = ['ws-strip'];
-  if (!split || focusedPane === pane) classes.push('focused');
+  if (focusedPane === pane) classes.push('focused');
 
   return (
     <div
@@ -122,14 +144,13 @@ function TabStrip({ pane, style, showSplitButton }: TabStripProps) {
       }}
       onDrop={(e) => onDrop(e, 'end')}
     >
-      {tabOrder.map((tab) => {
-        const label    = WORKSPACE_TABS.find((t) => t.id === tab)?.label ?? tab;
-        const isActive = activeTab[pane] === tab;
+      {tabs.map((tab) => {
+        const label    = tabLabel(tab);
+        const isActive = active === tab;
         const cls = ['ws-tab'];
-        if (isActive)              cls.push('active');
-        if (tab === otherTab)      cls.push('elsewhere');
-        if (tab === dragTab)       cls.push('dragging');
-        if (dropOver === tab && dragTab !== tab) cls.push('drop-before');
+        if (isActive)            cls.push('active');
+        if (tab === draggingTab) cls.push('dragging');
+        if (dropOver === tab && draggingTab !== tab) cls.push('drop-before');
         return (
           <button
             key={tab}
@@ -139,10 +160,10 @@ function TabStrip({ pane, style, showSplitButton }: TabStripProps) {
             draggable
             onClick={() => selectTab(pane, tab)}
             onDragStart={(e) => onDragStart(e, tab)}
-            onDragEnd={() => { setDragTab(null); setDropOver(null); }}
+            onDragEnd={() => { setDraggingTab(null); setDropOver(null); }}
             onDragOver={(e) => onDragOver(e, tab)}
             onDrop={(e) => onDrop(e, tab)}
-            title={tab === otherTab ? `${label} (shown in the other pane -- click to swap)` : label}
+            title={`${label} -- drag to reorder or to another pane`}
           >
             <span className="ws-tab-label">{label}</span>
             {dotFor(tab) && (
@@ -154,66 +175,156 @@ function TabStrip({ pane, style, showSplitButton }: TabStripProps) {
 
       <div className={`ws-strip-end${dropOver === 'end' ? ' drop-before' : ''}`} />
 
-      {showSplitButton && !split && (
-        <button className="ws-strip-btn" onClick={() => openSplit()}
-          title="Split view -- show two tabs side by side" aria-label="Split view">
-          <SplitIcon />
-        </button>
-      )}
-      {split && (
-        <button className="ws-strip-btn" onClick={() => closePane(pane)}
-          title="Close this pane" aria-label="Close this pane">
-          <CloseIcon />
-        </button>
-      )}
+      {children}
     </div>
   );
 }
 
 // ── Tab content ──────────────────────────────────────────────────────────────
 
-function TabContent({ tab }: { tab: WorkspaceTab }) {
+function TabContent({ tab }: { tab: TabId }) {
   switch (tab) {
     case 'frames':  return <MessageTable />;
     case 'canopen': return <div className="ws-scroll"><CANopenPanel /></div>;
     case 'j1939':   return <div className="ws-scroll"><J1939Panel /></div>;
     case 'plot':    return <div className="ws-plot"><SignalPlot /></div>;
+    case 'send':    return <div className="ws-scroll"><SendFramePanel /></div>;
+    case 'record':  return <div className="ws-scroll"><LogControls /></div>;
+    case 'replay':  return <div className="ws-scroll"><ReplayPanel /></div>;
   }
 }
 
-// ── Workspace ────────────────────────────────────────────────────────────────
+// One persistent element per tab; PaneBody moves it into the pane holding the tab
+const hosts = new Map<TabId, HTMLDivElement>();
+
+function hostFor(tab: TabId): HTMLDivElement {
+  let el = hosts.get(tab);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'ws-host';
+    hosts.set(tab, el);
+  }
+  return el;
+}
+
+/** Renders every tab that has been shown into its host element. */
+function TabBodies() {
+  const active  = useLayoutStore((s) => s.active);
+  const mounted = useRef(new Set<TabId>());
+  for (const pane of PANES) {
+    const tab = active[pane];
+    if (tab) mounted.current.add(tab);
+  }
+  return <>{[...mounted.current].map((tab) => createPortal(<TabContent tab={tab} />, hostFor(tab), tab))}</>;
+}
+
+// ── Pane body with drop zones ────────────────────────────────────────────────
+
+type DropTarget = { pane: PaneId; shadow: React.CSSProperties };
+
+/** Where a tab dropped at (x, y) inside `pane`'s content would go. */
+function dropTargetAt(pane: PaneId, tab: TabId, rect: DOMRect, x: number, y: number): DropTarget | null {
+  const { panes } = useLayoutStore.getState();
+  const fx = (x - rect.left) / rect.width;
+  const fy = (y - rect.top) / rect.height;
+  const candidates: DropTarget[] = [];
+  if (pane !== 'bottom' && fy > 1 - EDGE_ZONE) {
+    candidates.push({ pane: 'bottom', shadow: { left: 0, right: 0, top: `${(1 - EDGE_ZONE) * 100}%`, bottom: 0 } });
+  }
+  if (pane === 'main' && panes.right.length === 0 && fx > 1 - EDGE_ZONE) {
+    candidates.push({ pane: 'right', shadow: { left: '50%', right: 0, top: 0, bottom: 0 } });
+  }
+  candidates.push({ pane, shadow: { left: 0, right: 0, top: 0, bottom: 0 } });
+  return candidates.find((c) => dropAllowed(tab, c.pane)) ?? null;
+}
+
+interface PaneBodyProps {
+  pane: PaneId;
+  style?: React.CSSProperties;
+}
+
+export function PaneBody({ pane, style }: PaneBodyProps) {
+  const tabs           = useLayoutStore((s) => s.panes[pane]);
+  const active         = useLayoutStore((s) => s.active[pane]);
+  const draggingTab    = useLayoutStore((s) => s.draggingTab);
+  const focusPane      = useLayoutStore((s) => s.focusPane);
+  const moveTab        = useLayoutStore((s) => s.moveTab);
+  const selectTab      = useLayoutStore((s) => s.selectTab);
+  const setDraggingTab = useLayoutStore((s) => s.setDraggingTab);
+
+  const slotRef = useRef<HTMLDivElement>(null);
+  const [target, setTarget] = useState<DropTarget | null>(null);
+
+  // Place this pane's tab hosts in the slot; only the active one is visible.
+  // The slot has no React children, so React never touches these nodes.
+  useLayoutEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return;
+    for (const tab of tabs) {
+      const host = hostFor(tab);
+      if (host.parentElement !== slot) slot.appendChild(host);
+      host.style.display = tab === active ? '' : 'none';
+    }
+  }, [tabs, active]);
+
+  const onDragOver = (e: React.DragEvent) => {
+    const tab = draggedTab(e);
+    if (!tab) return;
+    const t = dropTargetAt(pane, tab, e.currentTarget.getBoundingClientRect(), e.clientX, e.clientY);
+    if (!t) { setTarget(null); return; }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (t.pane !== target?.pane) setTarget(t);
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    const tab = e.dataTransfer.getData(DRAG_MIME) as TabId;
+    const t   = target;
+    setTarget(null);
+    setDraggingTab(null);
+    if (!tab || !t) return;
+    e.preventDefault();
+    const { panes } = useLayoutStore.getState();
+    if (paneOf(panes, tab) === t.pane) selectTab(t.pane, tab);
+    else moveTab(tab, t.pane, null);
+  };
+
+  return (
+    <div className="ws-pane" style={style} onMouseDownCapture={() => focusPane(pane)}>
+      <div className="ws-slot" ref={slotRef} />
+      {draggingTab && (
+        <div
+          className="ws-drop-layer"
+          onDragOver={onDragOver}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTarget(null);
+          }}
+          onDrop={onDrop}
+        >
+          {target && <div className="ws-drop-shadow" style={target.shadow} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Workspace (main + right panes) ───────────────────────────────────────────
 
 export function Workspace() {
-  const split         = useLayoutStore((s) => s.split);
-  const activeTab     = useLayoutStore((s) => s.activeTab);
+  const hasRight      = useLayoutStore((s) => s.panes.right.length > 0);
+  const mainCount     = useLayoutStore((s) => s.panes.main.length);
   const splitRatio    = useLayoutStore((s) => s.splitRatio);
-  const focusPane     = useLayoutStore((s) => s.focusPane);
   const setSplitRatio = useLayoutStore((s) => s.setSplitRatio);
+  const openSplit     = useLayoutStore((s) => s.openSplit);
+  const closePane     = useLayoutStore((s) => s.closePane);
 
   const bodyRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
 
-  // Lazy mount: a tab is rendered once it has been shown, then kept alive
-  const mounted = useRef(new Set<WorkspaceTab>());
-  mounted.current.add(activeTab.left);
-  if (split) mounted.current.add(activeTab.right);
-
-  const paneOf = (tab: WorkspaceTab): Pane | null => {
-    if (tab === activeTab.left) return 'left';
-    if (split && tab === activeTab.right) return 'right';
-    return null;
-  };
-
-  // Left pane width; the divider takes DIVIDER_PX out of the remaining space
-  const leftFlex = split
+  // Main pane width; the divider takes DIVIDER_PX out of the remaining space
+  const mainFlex = hasRight
     ? `0 0 calc(${(splitRatio * 100).toFixed(2)}% - ${DIVIDER_PX / 2}px)`
     : '1 1 0';
-
-  const paneStyle = (pane: Pane | null): React.CSSProperties => {
-    if (pane === null)   return { display: 'none' };
-    if (pane === 'left') return { order: 0, flex: leftFlex };
-    return { order: 2, flex: '1 1 0' };
-  };
 
   // Listeners are attached synchronously on mousedown so even a fast drag
   // (press-move-release before the next render) is tracked.
@@ -238,44 +349,47 @@ export function Workspace() {
     <div className={`app-main workspace${dragging ? ' resizing' : ''}`}>
       {/* Tab strips -- one per pane, aligned with the panes below */}
       <div className="ws-strips">
-        <TabStrip pane="left" style={{ flex: leftFlex }} showSplitButton />
-        {split && (
+        <TabStrip pane="main" style={{ flex: mainFlex }}>
+          {!hasRight && mainCount > 1 && (
+            <button className="ws-strip-btn" onClick={openSplit}
+              title="Split view -- or drag a tab to the right edge" aria-label="Split view">
+              <SplitIcon />
+            </button>
+          )}
+        </TabStrip>
+        {hasRight && (
           <>
             <div className="ws-strip-gap" style={{ flex: `0 0 ${DIVIDER_PX}px` }} />
-            <TabStrip pane="right" style={{ flex: '1 1 0' }} showSplitButton={false} />
+            <TabStrip pane="right" style={{ flex: '1 1 0' }}>
+              <button className="ws-strip-btn" onClick={() => closePane('right')}
+                title="Close this pane -- its tabs go back to the left" aria-label="Close this pane">
+                <CloseIcon />
+              </button>
+            </TabStrip>
           </>
         )}
       </div>
 
-      {/* Tab bodies */}
+      {/* Pane bodies */}
       <div className="ws-body" ref={bodyRef}>
-        {WORKSPACE_TABS.map(({ id }) => {
-          if (!mounted.current.has(id)) return null;
-          const pane = paneOf(id);
-          return (
+        <PaneBody pane="main" style={{ flex: mainFlex }} />
+        {hasRight && (
+          <>
             <div
-              key={id}
-              className="ws-pane"
-              style={paneStyle(pane)}
-              onMouseDownCapture={() => pane && focusPane(pane)}
+              className={`ws-divider${dragging ? ' dragging' : ''}`}
+              style={{ flex: `0 0 ${DIVIDER_PX}px` }}
+              onMouseDown={onDividerMouseDown}
+              onDoubleClick={() => setSplitRatio(0.5)}
+              title="Drag to resize -- double-click to reset"
             >
-              <TabContent tab={id} />
+              <div className="ws-divider-grip" />
             </div>
-          );
-        })}
-
-        {split && (
-          <div
-            className={`ws-divider${dragging ? ' dragging' : ''}`}
-            style={{ order: 1, flex: `0 0 ${DIVIDER_PX}px` }}
-            onMouseDown={onDividerMouseDown}
-            onDoubleClick={() => setSplitRatio(0.5)}
-            title="Drag to resize -- double-click to reset"
-          >
-            <div className="ws-divider-grip" />
-          </div>
+            <PaneBody pane="right" style={{ flex: '1 1 0' }} />
+          </>
         )}
       </div>
+
+      <TabBodies />
     </div>
   );
 }

@@ -13,6 +13,7 @@ export function App() {
 
   const sidebarOpen   = useLayoutStore((s) => s.sidebarOpen);
   const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
+  const hasBottom     = useLayoutStore((s) => s.panes.bottom.length > 0);
 
   // Ctrl+B toggles the sidebar (same shortcut as VS Code)
   useEffect(() => {
@@ -31,7 +32,7 @@ export function App() {
       <TopBar />
       <Sidebar />
       <Workspace />
-      <BottomPanel />
+      {hasBottom && <BottomPanel />}
     </div>
   );
 }

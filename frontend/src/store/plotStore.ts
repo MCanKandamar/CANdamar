@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { CUSTOM_MESSAGE_NAME } from './customSignalStore';
 
 export const SIGNAL_COLORS = [
   '#22c55e',  // green
@@ -13,6 +14,25 @@ export const SIGNAL_COLORS = [
 
 export const MAX_SIGNALS    = 8;
 export const DISPLAY_POINTS = 2_000;
+
+// ─── Signal sources ──────────────────────────────────────────────────────────
+// A plot key is "<message>.<signal>". The message part tells where the value
+// came from: a DBC message name, "CANopen 0x0D" (EDS-decoded PDO),
+// "SDO 0x0D" (SDO upload) or "Custom" (DBC-less raw bytes).
+
+export type SignalSource = 'dbc' | 'pdo' | 'sdo' | 'custom';
+
+const nodeHex = (nodeId: number) => `0x${nodeId.toString(16).toUpperCase().padStart(2, '0')}`;
+
+export const pdoMessageName = (nodeId: number) => `CANopen ${nodeHex(nodeId)}`;
+export const sdoMessageName = (nodeId: number) => `SDO ${nodeHex(nodeId)}`;
+
+export function signalSource(key: string): SignalSource {
+  if (key.startsWith(`${CUSTOM_MESSAGE_NAME}.`)) return 'custom';
+  if (/^CANopen 0x[0-9A-F]{2}\./.test(key)) return 'pdo';
+  if (/^SDO 0x[0-9A-F]{2}\./.test(key)) return 'sdo';
+  return 'dbc';
+}
 
 // ─── Ring buffers - module scope, never in Zustand ───────────────────────────
 
@@ -53,10 +73,11 @@ export function readBuffer(buf: RingBuffer): [Float64Array, Float32Array] {
 // ─── Public write API (called from frameStore) ────────────────────────────────
 
 export function addSignalValues(
-  signals: Array<{ name: string; message_name: string; value: unknown }>,
+  signals: Array<{ name: string; message_name: string; value: unknown; unit?: string }>,
   timestampSec: number,
 ): void {
   const newKeys: string[] = [];
+  const newUnits: Record<string, string> = {};
   for (const sig of signals) {
     const v = Number(sig.value);
     if (!Number.isFinite(v)) continue;
@@ -64,12 +85,14 @@ export function addSignalValues(
     if (!ringBuffers.has(key)) {
       ringBuffers.set(key, createRingBuffer());
       newKeys.push(key);
+      if (sig.unit) newUnits[key] = sig.unit;
     }
     writePoint(ringBuffers.get(key)!, timestampSec, v);
   }
   if (newKeys.length > 0) {
     usePlotStore.setState((s) => ({
       availableSignals: [...s.availableSignals, ...newKeys],
+      signalUnits:      { ...s.signalUnits, ...newUnits },
     }));
   }
 }
@@ -103,6 +126,8 @@ export function getLatestValue(key: string): number | null {
 interface PlotStore {
   selectedSignals:  string[];
   availableSignals: string[];
+  /** Unit reported by the source (DBC, EDS), by plot key */
+  signalUnits:      Record<string, string>;
   windowSec:        number;
   toggleSignal:     (key: string) => void;
   setWindowSec:     (s: number) => void;
@@ -114,6 +139,7 @@ interface PlotStore {
 export const usePlotStore = create<PlotStore>((set, get) => ({
   selectedSignals:  [],
   availableSignals: [],
+  signalUnits:      {},
   windowSec:        60,
 
   toggleSignal: (key) => {
@@ -129,7 +155,7 @@ export const usePlotStore = create<PlotStore>((set, get) => ({
 
   clearBuffers: () => {
     ringBuffers.clear();
-    set({ selectedSignals: [], availableSignals: [] });
+    set({ selectedSignals: [], availableSignals: [], signalUnits: {} });
   },
 
   forgetSignal: (key) => {

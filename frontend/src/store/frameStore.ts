@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CanFrame, FrameRow, FilterState } from '../types/can';
 import { usePlotStore } from './plotStore';
-import { addSignalValues } from './plotStore';
+import { addSignalValues, pdoMessageName, sdoMessageName } from './plotStore';
 import { decodeCustomSignals } from './customSignalStore';
 
 // Rolling window duration for rate calculation (ms)
@@ -114,13 +114,25 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
     // We synthesise message_name from node_id so the plot key matches other signals.
     if (frame.canopen?.pdo_signals?.length && frame.canopen.node_id != null) {
       const tSec = nowMs / 1000;
-      const msgName = `CANopen 0x${frame.canopen.node_id.toString(16).toUpperCase().padStart(2, '0')}`;
+      const msgName = pdoMessageName(frame.canopen.node_id);
       const pdoSignals = frame.canopen.pdo_signals.map((sig) => ({
         name:         sig.name,
         message_name: msgName,
         value:        sig.value,
+        unit:         sig.unit,
       }));
       addSignalValues(pdoSignals, tSec);
+    }
+
+    // Feed values of expedited SDO uploads seen on the bus (any SDO client)
+    const sdo = frame.canopen?.sdo_transaction;
+    if (sdo && !sdo.is_abort && sdo.response_cmd.startsWith('Upload Response (expedited')
+        && sdo.value_int != null) {
+      addSignalValues([{
+        name:         sdo.object_name || `${sdo.index}:${sdo.subindex}`,
+        message_name: sdoMessageName(sdo.node_id),
+        value:        sdo.value_int,
+      }], nowMs / 1000);
     }
 
     // Feed DBC-less custom signals (defined in the Plot tab) into the plot store

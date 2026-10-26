@@ -1,5 +1,5 @@
 import { useConnectionStore } from '../../store/connectionStore';
-import { useStatsStore } from '../../store/statsStore';
+import { useStatsStore, type SlcanStatus } from '../../store/statsStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useLayoutStore } from '../../store/layoutStore';
 
@@ -47,6 +47,42 @@ function SidebarIcon({ open }: { open: boolean }) {
       <line x1="9" y1="4" x2="9" y2="20" />
       {open && <rect x="3" y="4" width="6" height="16" fill="currentColor" stroke="none" opacity="0.35" />}
     </svg>
+  );
+}
+
+// slcan 'F' status bits worth showing, most severe first
+const SLCAN_FLAGS: { bit: number; label: string; color: string; title: string }[] = [
+  { bit: 0x80, label: 'BUS ERR',  color: 'var(--accent-red)',   title: 'Bus error, or the controller is bus-off' },
+  { bit: 0x20, label: 'PASSIVE',  color: 'var(--accent-red)',   title: 'Error passive: error counter above 127' },
+  { bit: 0x04, label: 'WARNING',  color: 'var(--accent-amber)', title: 'Error warning: error counter above 96' },
+  { bit: 0x08, label: 'OVERRUN',  color: 'var(--accent-amber)', title: 'Data overrun: the adapter dropped received frames' },
+  { bit: 0x01, label: 'RX FULL',  color: 'var(--accent-amber)', title: 'The adapter receive queue is full' },
+  { bit: 0x02, label: 'TX FULL',  color: 'var(--accent-amber)', title: 'The adapter transmit queue is full' },
+  { bit: 0x40, label: 'ARB LOST', color: 'var(--text-secondary)', title: 'Arbitration lost while sending' },
+];
+
+const STALE_S = 3;   // no 'F' answer for this long: the adapter does not support it
+
+/** Bus state reported by the slcan adapter ('F' polled once a second). */
+function SlcanFlags({ status }: { status: SlcanStatus }) {
+  if (status.flags === null || (status.age_s ?? 0) > STALE_S) return null;
+  const active = SLCAN_FLAGS.filter((f) => status.recent & f.bit);
+  const hex = `F${status.flags.toString(16).toUpperCase().padStart(2, '0')}`;
+  return (
+    <>
+      <div style={styles.stat} title={`slcan status flags (last answer ${hex}, shown for 5 s after they occur)`}>
+        {active.length === 0 ? (
+          <span style={{ ...styles.flag, color: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}>
+            BUS OK
+          </span>
+        ) : active.map((f) => (
+          <span key={f.bit} style={{ ...styles.flag, color: f.color, borderColor: f.color }} title={f.title}>
+            {f.label}
+          </span>
+        ))}
+      </div>
+      <Divider />
+    </>
   );
 }
 
@@ -142,6 +178,9 @@ export function TopBar() {
               </span>
             </div>
             <Divider />
+
+            {/* slcan adapter status ('F' flags) */}
+            {isSlcan && stats.slcan_status && <SlcanFlags status={stats.slcan_status} />}
 
             {/* Bus-off events */}
             {stats.bus_off_events > 0 && (
@@ -258,6 +297,16 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--accent-green)',
     minWidth: 36,
     textAlign: 'right',
+  },
+  flag: {
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    fontFamily: 'var(--font-mono)',
+    border: '1px solid',
+    borderRadius: 3,
+    padding: '1px 4px',
+    marginLeft: 4,
   },
   statUnit: {
     fontSize: 10,

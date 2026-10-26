@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 
+/** slcan adapter status from the 'F' command (see backend slcan_status.py) */
+export interface SlcanStatus {
+  flags:  number | null;   // last answer, null until the adapter has answered
+  recent: number;          // every bit reported in the last few seconds
+  age_s:  number | null;   // seconds since the last answer
+}
+
 export interface BusStats {
   frames_rx: number;
   frames_tx: number;
@@ -13,6 +20,7 @@ export interface BusStats {
   bitrate: number;
   uptime_s: number | null;
   connected: boolean;
+  slcan_status?: SlcanStatus | null;
 }
 
 const DEFAULT_STATS: BusStats = {

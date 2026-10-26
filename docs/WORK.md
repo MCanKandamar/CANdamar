@@ -25,7 +25,7 @@ C. Tabs
 - [x] 7. Each pane (main, right, bottom) has its own tabs; dragging a tab to the edge of the content area opens a pane (drop shadow), an empty pane closes — verified: tsc + lint + build ✓, tried in browser (edge drops, shadow, empty pane closes, no remount on move, 0.4.0 layout migrated)
 - [x] 8. Send Frame / Record / Replay join the same tab system and can move between panes (no floating windows) — verified: tsc + lint + build ✓, tried in browser (Send Frame to the right pane, bottom closes when empty and reopens from the bottom edge)
 D. slcan status
-- [ ] 9. slcan: poll `F` once a second, show error warning / passive, bus-off, overrun in the top bar (python-can's slcan driver ignores `Fxx` lines; small subclass; other interfaces unchanged)
+- [x] 9. slcan: poll `F` once a second, show error warning / passive, bus-off, overrun in the top bar (python-can's slcan driver ignores `Fxx` lines; small subclass; other interfaces unchanged) — verified: pytest (31) + ruff ✓, tsc + lint + build ✓, tried end to end with a fake TCP slcan adapter (socket://); needs HW test
 E. Monitoring and polish
 - [ ] 10. Trace mode (time-ordered stream, pause, last 10k frames)
 - [ ] 11. Highlight changed bytes in Monitor mode

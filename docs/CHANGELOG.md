@@ -6,7 +6,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## Unreleased
+## v0.5.0 -- tabs in three panes, Trace view, plot over SDO, slcan status flags
 
 ### Added
 - Tabs in three panes -- main, right and bottom each have their own tabs; Send Frame, Record and Replay are tabs too. Drag a tab to the right or bottom edge of a pane to open a pane there (a shadow shows where it goes); an empty pane closes. Moving a tab keeps its state

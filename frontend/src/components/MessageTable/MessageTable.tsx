@@ -3,6 +3,7 @@ import {
   useReactTable,
   getCoreRowModel,
   type ColumnDef,
+  type ColumnSizingState,
   flexRender,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -15,6 +16,27 @@ import { formatAbortCode, isSdoWriteResponse, sdoAbortCodeOf, sdoAbortText } fro
 const FLASH_DURATION_MS = 400;
 const ROW_HEIGHT = 30;
 const SIGNAL_ROW_HEIGHT = 18;
+const HEADER_HEIGHT = 30;
+const EXPAND_WIDTH = 30;
+const MIN_COLUMN_WIDTH = 32;
+
+// Column widths set by dragging a header edge; double-click restores the default
+const SIZING_KEY = 'canviz:frameColumns';
+
+function loadColumnSizing(): ColumnSizingState {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}');
+    const out: ColumnSizingState = {};
+    if (raw && typeof raw === 'object') {
+      for (const [id, w] of Object.entries(raw)) {
+        if (typeof w === 'number' && w >= MIN_COLUMN_WIDTH) out[id] = w;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 // ── Flash tracker ─────────────────────────────────────────────────────────────
 const flashTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -367,9 +389,19 @@ export function MessageTable() {
     return cols;
   }, [j1939Mode, canopenMode]);
 
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadColumnSizing);
+
+  useEffect(() => {
+    try { localStorage.setItem(SIZING_KEY, JSON.stringify(columnSizing)); } catch { /* ignore */ }
+  }, [columnSizing]);
+
   const table = useReactTable({
     data: frameList,
     columns,
+    state: { columnSizing },
+    onColumnSizingChange: setColumnSizing,
+    columnResizeMode: 'onChange',
+    defaultColumn: { minSize: MIN_COLUMN_WIDTH },
     getCoreRowModel: getCoreRowModel(),
   });
 
@@ -394,6 +426,8 @@ export function MessageTable() {
   const virtualizer = useVirtualizer({
     count: flatItems.length,
     getScrollElement: () => parentRef.current,
+    // Rows start below the sticky header inside the same scroll element
+    scrollMargin: HEADER_HEIGHT,
     estimateSize: (i) => {
       const item = flatItems[i];
       if (item.type === 'signals') {
@@ -405,28 +439,40 @@ export function MessageTable() {
   });
 
   const isEmpty = frameList.length === 0;
+  // The expand column is drawn separately with a fixed width
+  const rowWidth = EXPAND_WIDTH + table.getTotalSize() - table.getColumn('expand')!.getSize();
 
   return (
     <div style={styles.wrapper}>
-      {/* Header */}
-      <div style={styles.header}>
-        {table.getHeaderGroups().map((hg) => (
-          <div key={hg.id} style={styles.headerRow}>
-            <div style={{ ...styles.headerCell, width: 30, flexShrink: 0 }} />
-            {hg.headers.slice(1).map((header) => (
-              <div
-                key={header.id}
-                style={{ ...styles.headerCell, width: header.getSize(), flexShrink: 0 }}
-              >
-                {flexRender(header.column.columnDef.header, header.getContext())}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* Virtualised body */}
+      {/* Header and virtualised body share one scroll element, so wide columns
+          scroll horizontally together */}
       <div ref={parentRef} style={styles.body}>
+        <div style={{ ...styles.header, minWidth: rowWidth }}>
+          {table.getHeaderGroups().map((hg) => (
+            <div key={hg.id} style={styles.headerRow}>
+              <div style={{ ...styles.headerCell, width: EXPAND_WIDTH, flexShrink: 0 }} />
+              {hg.headers.slice(1).map((header) => (
+                <div
+                  key={header.id}
+                  style={{ ...styles.headerCell, width: header.getSize(), flexShrink: 0 }}
+                >
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                  <div
+                    style={{
+                      ...styles.resizer,
+                      background: header.column.getIsResizing() ? 'var(--accent-green)' : undefined,
+                    }}
+                    onMouseDown={header.getResizeHandler()}
+                    onTouchStart={header.getResizeHandler()}
+                    onDoubleClick={() => header.column.resetSize()}
+                    title="Drag to resize, double-click to reset"
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
         {isEmpty ? (
           <div style={styles.empty}>
             <span style={styles.emptyIcon}>◈</span>
@@ -434,7 +480,13 @@ export function MessageTable() {
             <span style={styles.emptyHint}>Connect to a CAN bus to start streaming</span>
           </div>
         ) : (
-          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              minWidth: rowWidth,
+              position: 'relative',
+            }}
+          >
             {virtualizer.getVirtualItems().map((vi) => {
               const item = flatItems[vi.index];
 
@@ -444,7 +496,7 @@ export function MessageTable() {
                     key={`sig-${item.frameId}`}
                     style={{
                       position: 'absolute',
-                      top: vi.start,
+                      top: vi.start - HEADER_HEIGHT,
                       width: '100%',
                       height: vi.size,
                     }}
@@ -468,7 +520,7 @@ export function MessageTable() {
                   }}
                   style={{
                     position: 'absolute',
-                    top: vi.start,
+                    top: vi.start - HEADER_HEIGHT,
                     width: '100%',
                     height: ROW_HEIGHT,
                     display: 'flex',
@@ -494,7 +546,7 @@ export function MessageTable() {
                   {row.getVisibleCells().slice(1).map((cell) => (
                     <div
                       key={cell.id}
-                      style={{ width: cell.column.getSize(), flexShrink: 0, paddingLeft: 8 }}
+                      style={{ ...styles.cell, width: cell.column.getSize() }}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </div>
@@ -558,17 +610,25 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'var(--bg-base)',
   },
   header: {
+    position: 'sticky',
+    top: 0,
+    zIndex: 1,
     background: 'var(--bg-panel)',
     borderBottom: '1px solid var(--border-subtle)',
-    flexShrink: 0,
   },
   headerRow: {
     display: 'flex',
     alignItems: 'center',
-    height: 30,
+    height: HEADER_HEIGHT,
   },
   headerCell: {
+    position: 'relative',
+    alignSelf: 'stretch',
+    display: 'flex',
+    alignItems: 'center',
     paddingLeft: 8,
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
     fontSize: 10,
     fontWeight: 600,
     letterSpacing: '0.08em',
@@ -576,13 +636,31 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-muted)',
     userSelect: 'none',
   },
+  cell: {
+    flexShrink: 0,
+    paddingLeft: 8,
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+    textOverflow: 'ellipsis',
+  },
+  resizer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 5,
+    height: '100%',
+    cursor: 'col-resize',
+    userSelect: 'none',
+    touchAction: 'none',
+    borderRight: '1px solid var(--border-subtle)',
+  },
   body: {
     flex: 1,
-    overflowY: 'auto',
-    overflowX: 'hidden',
+    minHeight: 0,
+    overflow: 'auto',
   },
   expandCell: {
-    width: 30,
+    width: EXPAND_WIDTH,
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',

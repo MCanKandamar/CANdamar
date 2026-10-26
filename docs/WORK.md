@@ -11,11 +11,33 @@ Task: Password reset · branch: feature/reset · started: 2026-10-25
 - [x] Token table + migration — verified: `npm test` ✓
 - [ ] (in progress) Send reset e-mail
 - [ ] Reset form -->
-_No active task._
+Task: CANdamar 0.5.0 · branch: feature/v0.5.0 (on top of chore/agent-lite-ci) · plan agreed 2026-10-26
+One commit per step; push, tag and release only after asking. The user tests on hardware 2026-10-27.
+A. Frames table
+- [ ] 1. Mouse-resizable columns (TanStack column resizing), saved, double-click = default width
+- [ ] 2. Last data column fills the remaining width; Protocol Info shows in full when it fits, badges inside that column
+- [ ] 3. Baudrate shown as `115200` (plain digits)
+B. Plot
+- [ ] 4. Signal list left of the plot, grouped by source (DBC / CANopen PDO / SDO / Custom), filled automatically; short help when empty
+- [ ] 5. Per-signal scale and unit, saved; suggest ×0.001 V for names/units ending in "mV"
+- [ ] 6. "Plot" button in the EDS object list: SDO read every 100 ms (decode with the EDS type), plotted; these periodic reads stay out of the SDO log
+C. Tabs
+- [ ] 7. Each pane (main, right, bottom) has its own tabs; dragging a tab to the edge of the content area opens a pane (drop shadow), an empty pane closes
+- [ ] 8. Send Frame / Record / Replay join the same tab system and can move between panes (no floating windows)
+D. slcan status
+- [ ] 9. slcan: poll `F` once a second, show error warning / passive, bus-off, overrun in the top bar (python-can's slcan driver ignores `Fxx` lines; small subclass; other interfaces unchanged)
+E. Monitoring and polish
+- [ ] 10. Trace mode (time-ordered stream, pause, last 10k frames)
+- [ ] 11. Highlight changed bytes in Monitor mode
+- [ ] 12. Pause + hex/dec switch
+- [ ] 13. Save / load Send Frame lists + CANopen templates
+- [ ] 14. Visual clean-up (shared CSS classes, consistent font sizes, density setting)
+F. Drive
+- [ ] 15. Drive Control: mode of operation 0x6060, target velocity 0x60FF, statusword bits shown one by one (drive CANopen phases 4–5)
+- [ ] 16. Docs + CHANGELOG, v0.5.0 (ask before bump / tag)
 
 ## Next
-1. CANdamar 0.5.0 (plan agreed 2026-10-26; moves to Now when started)
-2. After the user's hardware test (2026-10-27): prepare upstream CANviz PR branches cherry-picked from `upstream/main`
+1. After the user's hardware test (2026-10-27): prepare upstream CANviz PR branches cherry-picked from `upstream/main`
 
 ## Done
 <!-- Newest first, one line each, with evidence label and commit if any. -->

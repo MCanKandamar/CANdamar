@@ -28,8 +28,52 @@ function dataToHex(data: number[]): string {
   return data.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
 }
 
+// ── Trace: time-ordered copy of the last TRACE_MAX frames ─────────────────────
+// A ring buffer outside zustand, so appending stays cheap at high frame
+// rates. The Trace view copies it out a few times a second.
+
+export const TRACE_MAX = 10_000;
+
+export type TraceRow = Omit<FrameRow, 'count' | 'rate' | 'lastSeen' | 'flashKey'> & {
+  seq:    number;   // running frame number since the last clear
+  timeMs: number;   // arrival time (Date.now())
+};
+
+const traceBuf: TraceRow[] = [];
+let traceHead    = 0;     // next write position once the buffer is full
+let traceSeq     = 0;
+let traceStartMs = 0;
+
+function pushTrace(row: TraceRow): void {
+  if (traceBuf.length < TRACE_MAX) traceBuf.push(row);
+  else {
+    traceBuf[traceHead] = row;
+    traceHead = (traceHead + 1) % TRACE_MAX;
+  }
+}
+
+/** Sequence number of the newest traced frame (changes on every frame). */
+export const traceVersion = () => traceSeq;
+
+/** Arrival time of the first frame since the last clear (trace time zero). */
+export const traceStart = () => traceStartMs;
+
+/** The traced frames, oldest first. */
+export function traceSnapshot(): TraceRow[] {
+  return traceBuf.length < TRACE_MAX
+    ? traceBuf.slice()
+    : [...traceBuf.slice(traceHead), ...traceBuf.slice(0, traceHead)];
+}
+
+function clearTrace(): void {
+  traceBuf.length = 0;
+  traceHead = 0;
+  traceSeq = 0;
+  traceStartMs = 0;
+}
+
 // Parse filter input: supports "1A2", "0x1A2", "100-200", "0x100-0x1FF"
-function parseIdFilter(text: string): { min?: number; max?: number } {
+export function parseIdFilter(text: string): { min?: number; max?: number } {
   const t = text.trim();
   if (!t) return {};
   const rangeParts = t.split('-').map((p) => p.trim());
@@ -104,6 +148,23 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
       canopen:        frame.canopen,   // ← carry CANopen decode through to the table row
     };
 
+    if (traceSeq === 0) traceStartMs = nowMs;
+    pushTrace({
+      seq:            ++traceSeq,
+      timeMs:         nowMs,
+      id:             updated.id,
+      idHex:          updated.idHex,
+      dlc:            updated.dlc,
+      data:           updated.data,
+      dataHex:        updated.dataHex,
+      isExtended:     updated.isExtended,
+      isRemote:       updated.isRemote,
+      isFd:           updated.isFd,
+      decodedSignals: updated.decodedSignals,
+      j1939:          updated.j1939,
+      canopen:        updated.canopen,
+    });
+
     if (signals?.length) {
       const tSec = nowMs / 1000;
       addSignalValues(signals, tSec);
@@ -158,6 +219,7 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
 
   clearFrames: () => {
     rateBuckets.clear();
+    clearTrace();
     usePlotStore.getState().clearBuffers();
     set({
       frames: new Map(),

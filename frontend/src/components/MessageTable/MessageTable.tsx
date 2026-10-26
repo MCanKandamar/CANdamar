@@ -8,10 +8,12 @@ import {
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useFrameStore } from '../../store/frameStore';
+import { useFrameViewStore } from '../../store/frameViewStore';
+import { TraceTable } from './TraceTable';
 import { useJ1939Store } from '../../store/j1939Store';
 import { useCANopenStore } from '../../store/canopenStore';
-import type { FrameRow, DecodedSignal, CANopenInfo } from '../../types/can';
-import { formatAbortCode, isSdoWriteResponse, sdoAbortCodeOf, sdoAbortText } from '../../utils/sdo';
+import type { FrameRow, DecodedSignal } from '../../types/can';
+import { canopenDetail, canopenTypeColor } from '../../utils/canopenDisplay';
 
 const FLASH_DURATION_MS = 400;
 const ROW_HEIGHT = 30;
@@ -227,63 +229,6 @@ const J1939_COLUMNS: ColumnDef<FrameRow>[] = [
   },
 ];
 
-// ── CANopen helpers ───────────────────────────────────────────────────────────
-
-const CANOPEN_TYPE_COLORS: Record<string, string> = {
-  NMT:        'var(--accent-amber)',
-  SYNC:       'var(--text-muted)',
-  TIME:       'var(--text-muted)',
-  EMCY:       'var(--accent-red)',
-  Heartbeat:  'var(--accent-green)',
-  TPDO1:      '#61afef',
-  TPDO2:      '#61afef',
-  TPDO3:      '#61afef',
-  TPDO4:      '#61afef',
-  RPDO1:      '#c678dd',
-  RPDO2:      '#c678dd',
-  RPDO3:      '#c678dd',
-  RPDO4:      '#c678dd',
-  'SDO-req':  'var(--text-muted)',
-  'SDO-resp': 'var(--accent-green)',
-};
-
-function canopenTypeColor(frameType: string): string {
-  return CANOPEN_TYPE_COLORS[frameType] ?? 'var(--text-secondary)';
-}
-
-function canopenDetail(co: CANopenInfo): string {
-  // SDO response with paired transaction -- show object name + value
-  if (co.sdo_transaction && co.sdo_transaction.object_name) {
-    const t = co.sdo_transaction;
-    if (t.is_abort) {
-      const code = sdoAbortCodeOf(t);
-      return `${t.object_name}: ABORT${code !== null ? ` ${formatAbortCode(code)} ${sdoAbortText(code)}` : ''}`;
-    }
-    if (isSdoWriteResponse(t)) return `${t.object_name}: WRITE OK`;
-    if (t.value_text) return `${t.object_name} = "${t.value_text}"`;
-    const val = t.data_hex ?? '';
-    return `${t.object_name}${val ? ' = ' + val : ''}`;
-  }
-  // Heartbeat -- just the NMT state
-  if (co.frame_type === 'Heartbeat' && co.nmt_state) {
-    return co.nmt_state;
-  }
-  // EMCY -- error name
-  if (co.frame_type === 'EMCY' && co.emcy) {
-    return co.emcy.error_name;
-  }
-  // NMT command
-  if (co.frame_type === 'NMT' && co.nmt) {
-    return co.nmt.description;
-  }
-  // PDO with signals (EDS decoded)
-  if (co.pdo_signals?.length) {
-    return co.pdo_signals.map((s) => `${s.name}=${s.value}`).join('  ');
-  }
-  // Generic detail string
-  return co.detail ?? '';
-}
-
 // ── CANopen column definitions ────────────────────────────────────────────────
 
 const CANOPEN_COLUMNS: ColumnDef<FrameRow>[] = [
@@ -349,8 +294,45 @@ const CANOPEN_COLUMNS: ColumnDef<FrameRow>[] = [
     },
   },
 ];
+// ── Frames tab: toolbar + Monitor or Trace view ───────────────────────────────
+
 export function MessageTable() {
-  const frameList   = useFrameStore((s) => s.frameList);
+  const view        = useFrameViewStore((s) => s.view);
+  const paused      = useFrameViewStore((s) => s.paused);
+  const setView     = useFrameViewStore((s) => s.setView);
+  const togglePause = useFrameViewStore((s) => s.togglePause);
+
+  return (
+    <div style={styles.wrapper}>
+      <div style={styles.toolbar}>
+        <div className="seg">
+          <button className={`seg-btn${view === 'monitor' ? ' active' : ''}`} onClick={() => setView('monitor')}
+            title="One row per CAN ID, updated in place">
+            Monitor
+          </button>
+          <button className={`seg-btn${view === 'trace' ? ' active' : ''}`} onClick={() => setView('trace')}
+            title="Every frame in time order (last 10,000)">
+            Trace
+          </button>
+        </div>
+        <button className={`seg-btn solo${paused ? ' active warn' : ''}`} onClick={togglePause}
+          title={paused ? 'Resume the live view' : 'Freeze the view -- frames are still received and recorded'}>
+          {paused ? '▶ Resume' : '❚❚ Pause'}
+        </button>
+        {paused && <span style={styles.pausedNote}>view paused -- still receiving</span>}
+      </div>
+      {view === 'monitor' ? <MonitorTable /> : <TraceTable />}
+    </div>
+  );
+}
+
+function MonitorTable() {
+  const liveList    = useFrameStore((s) => s.frameList);
+  const paused      = useFrameViewStore((s) => s.paused);
+  // Paused: keep showing the list as it was when the view was frozen
+  const shownList   = useRef(liveList);
+  if (!paused) shownList.current = liveList;
+  const frameList   = shownList.current;
   const showDecoded = useFrameStore((s) => s.filter.showDecoded);
   const j1939Mode   = useJ1939Store((s) => s.mode);
   const canopenMode = useCANopenStore((s) => s.mode);
@@ -442,7 +424,7 @@ export function MessageTable() {
   const rowWidth = EXPAND_WIDTH + table.getTotalSize() - table.getColumn('expand')!.getSize();
 
   return (
-    <div style={styles.wrapper}>
+    <div style={styles.inner}>
       {/* Header and virtualised body share one scroll element, so wide columns
           scroll horizontally together */}
       <div ref={parentRef} style={styles.body}>
@@ -615,6 +597,27 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     overflow: 'hidden',
     background: 'var(--bg-base)',
+  },
+  inner: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  toolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    height: 32,
+    flexShrink: 0,
+    padding: '0 8px',
+    borderBottom: '1px solid var(--border-subtle)',
+    background: 'var(--bg-panel)',
+  },
+  pausedNote: {
+    fontSize: 11,
+    color: 'var(--accent-amber)',
   },
   header: {
     position: 'sticky',

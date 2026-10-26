@@ -677,6 +677,40 @@ body {
 }
 
 /* ============================================================
+   Segmented buttons (view switches in tab toolbars)
+   ============================================================ */
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.seg-btn {
+  height: 22px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.seg .seg-btn + .seg-btn { border-left: 1px solid var(--border-default); }
+.seg-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.seg-btn.active { background: var(--accent-green-dim); color: var(--accent-green); }
+.seg-btn.solo {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+.seg-btn.active.warn {
+  background: transparent;
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
+/* ============================================================
    Accordion
    ============================================================ */
 

@@ -193,7 +193,7 @@ export function SendFramePanel() {
                 style={{ cursor: 'pointer', accentColor: 'var(--accent-green)', margin: 0 }}
               />
               <span style={{
-                fontSize: 8,
+                fontSize: 'var(--fs-xs)',
                 fontFamily: 'var(--font-mono)',
                 color: f.isExtended ? 'var(--accent-green)' : 'var(--text-muted)',
                 letterSpacing: '0.02em',
@@ -214,7 +214,7 @@ export function SendFramePanel() {
                 style={{ cursor: 'pointer', accentColor: 'var(--accent-amber)', margin: 0 }}
               />
               <span style={{
-                fontSize: 8,
+                fontSize: 'var(--fs-xs)',
                 fontFamily: 'var(--font-mono)',
                 color: f.isRemote ? 'var(--accent-amber)' : 'var(--text-muted)',
                 letterSpacing: '0.02em',
@@ -236,7 +236,7 @@ export function SendFramePanel() {
                 onChange={(e) => updateFrame(f.id, { intervalMs: Math.max(0, parseInt(e.target.value) || 0) })}
                 title="Interval in milliseconds (0 = send by hand only)"
               />
-              <span style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                 ms{f.intervalMs > 0 ? ` · ${rateLabel(f.intervalMs)}` : ''}
               </span>
             </div>

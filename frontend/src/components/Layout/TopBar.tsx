@@ -1,5 +1,6 @@
 import { useConnectionStore } from '../../store/connectionStore';
 import { useStatsStore, type SlcanStatus } from '../../store/statsStore';
+import { useDensityStore } from '../../store/densityStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useLayoutStore } from '../../store/layoutStore';
 
@@ -86,11 +87,24 @@ function SlcanFlags({ status }: { status: SlcanStatus }) {
   );
 }
 
+// Three lines, closer together when compact
+function DensityIcon({ compact }: { compact: boolean }) {
+  const ys = compact ? [8, 12, 16] : [6, 12, 18];
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      {ys.map((y) => <line key={y} x1="4" y1={y} x2="20" y2={y} />)}
+    </svg>
+  );
+}
+
 export function TopBar() {
   const status    = useConnectionStore((s) => s.status);
   const config    = useConnectionStore((s) => s.config);
   const stats     = useStatsStore((s) => s.stats);
   const { theme, toggle } = useThemeStore();
+  const density       = useDensityStore((s) => s.density);
+  const toggleDensity = useDensityStore((s) => s.toggle);
   const sidebarOpen   = useLayoutStore((s) => s.sidebarOpen);
   const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
 
@@ -205,6 +219,17 @@ export function TopBar() {
 
         <Divider />
 
+        {/* Density toggle */}
+        <button
+          className="theme-toggle"
+          onClick={toggleDensity}
+          title={density === 'compact' ? 'Comfortable density (taller rows)' : 'Compact density (more rows on screen)'}
+          aria-label="Toggle density"
+          aria-pressed={density === 'compact'}
+        >
+          <DensityIcon compact={density === 'compact'} />
+        </button>
+
         {/* Theme toggle */}
         <button
           className="theme-toggle"
@@ -299,7 +324,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'right',
   },
   flag: {
-    fontSize: 9,
+    fontSize: 'var(--fs-xs)',
     fontWeight: 700,
     letterSpacing: '0.06em',
     fontFamily: 'var(--font-mono)',

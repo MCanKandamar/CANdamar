@@ -107,11 +107,11 @@ export function SignalList() {
         const groupKeys = keys.filter((k) => signalSource(k) === g.id).sort();
         return (
           <div key={g.id} style={styles.group}>
-            <div style={styles.groupHead}>
+            <div className="section-label" style={styles.groupHead}>
               {g.label}
               {groupKeys.length > 0 && <span style={styles.count}>{groupKeys.length}</span>}
             </div>
-            {groupKeys.length === 0 && <div style={styles.hint}>{g.hint}</div>}
+            {groupKeys.length === 0 && <div className="hint-text" style={styles.hint}>{g.hint}</div>}
             {g.id === 'sdo' && polled.length > 0 && pollError && (
               <div style={styles.error} title={pollError}>Read failed: {pollError}</div>
             )}
@@ -192,15 +192,10 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    color: 'var(--text-muted)',
     marginBottom: 4,
   },
   count: {
-    fontSize: 10,
+    fontSize: 'var(--fs-xs)',
     color: 'var(--text-secondary)',
     border: '1px solid var(--border-default)',
     borderRadius: 8,
@@ -208,9 +203,6 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: 0,
   },
   hint: {
-    fontSize: 11,
-    color: 'var(--text-muted)',
-    lineHeight: 1.4,
     paddingLeft: 2,
   },
   row: {
@@ -256,7 +248,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-muted)',
   },
   error: {
-    fontSize: 10,
+    fontSize: 'var(--fs-xs)',
     color: 'var(--accent-red)',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -268,7 +260,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'none',
     border: 'none',
     color: 'var(--accent-amber)',
-    fontSize: 9,
+    fontSize: 'var(--fs-xs)',
     lineHeight: 1,
     padding: '0 2px',
     cursor: 'pointer',
@@ -279,9 +271,9 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px dashed var(--accent-amber)',
     borderRadius: 3,
     color: 'var(--accent-amber)',
-    fontSize: 9,
+    fontSize: 'var(--fs-xs)',
     lineHeight: 1,
-    padding: '2px 3px',
+    padding: '1px 3px',
     cursor: 'pointer',
   },
   gear: {

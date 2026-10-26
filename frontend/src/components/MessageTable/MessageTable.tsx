@@ -9,6 +9,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useFrameStore } from '../../store/frameStore';
 import { useFrameViewStore, formatByte } from '../../store/frameViewStore';
+import { useDensityStore } from '../../store/densityStore';
 import { TraceTable } from './TraceTable';
 import { useJ1939Store } from '../../store/j1939Store';
 import { useCANopenStore } from '../../store/canopenStore';
@@ -16,7 +17,7 @@ import type { FrameRow, DecodedSignal } from '../../types/can';
 import { canopenDetail, canopenTypeColor } from '../../utils/canopenDisplay';
 
 const FLASH_DURATION_MS = 400;
-const ROW_HEIGHT = 30;
+const ROW_HEIGHT = { comfortable: 30, compact: 22 };
 const SIGNAL_ROW_HEIGHT = 18;
 const HEADER_HEIGHT = 30;
 const EXPAND_WIDTH = 30;
@@ -414,6 +415,7 @@ function MonitorTable() {
   });
 
   const { rows } = table.getRowModel();
+  const rowHeight = ROW_HEIGHT[useDensityStore((s) => s.density)];
   const parentRef = useRef<HTMLDivElement>(null);
 
   const flatItems = useMemo(() => {
@@ -441,10 +443,13 @@ function MonitorTable() {
       if (item.type === 'signals') {
         return item.signals.length * SIGNAL_ROW_HEIGHT + 8;
       }
-      return ROW_HEIGHT;
+      return rowHeight;
     },
     overscan: 20,
   });
+
+  // Row height changed (density): drop the cached row positions
+  useEffect(() => { virtualizer.measure(); }, [rowHeight, virtualizer]);
 
   const isEmpty = frameList.length === 0;
   // The expand column is drawn separately with a fixed width
@@ -458,10 +463,11 @@ function MonitorTable() {
         <div style={{ ...styles.header, minWidth: rowWidth }}>
           {table.getHeaderGroups().map((hg) => (
             <div key={hg.id} style={styles.headerRow}>
-              <div style={{ ...styles.headerCell, width: EXPAND_WIDTH, flexShrink: 0 }} />
+              <div className="section-label" style={{ ...styles.headerCell, width: EXPAND_WIDTH, flexShrink: 0 }} />
               {hg.headers.slice(1).map((header, i, all) => (
                 <div
                   key={header.id}
+                  className="section-label"
                   style={{
                     ...styles.headerCell,
                     width: header.getSize(),
@@ -537,7 +543,7 @@ function MonitorTable() {
                     position: 'absolute',
                     top: vi.start - HEADER_HEIGHT,
                     width: '100%',
-                    height: ROW_HEIGHT,
+                    height: rowHeight,
                     display: 'flex',
                     alignItems: 'center',
                     cursor: hasSignals ? 'pointer' : 'default',
@@ -643,7 +649,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'var(--bg-panel)',
   },
   pausedNote: {
-    fontSize: 11,
+    fontSize: 'var(--fs-sm)',
     color: 'var(--accent-amber)',
   },
   header: {
@@ -666,12 +672,6 @@ const styles: Record<string, React.CSSProperties> = {
     paddingLeft: 8,
     overflow: 'hidden',
     whiteSpace: 'nowrap',
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    color: 'var(--text-muted)',
-    userSelect: 'none',
   },
   cell: {
     flexShrink: 0,
@@ -704,7 +704,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
   },
   expandIcon: {
-    fontSize: 8,
+    fontSize: 8,      // the ▶ glyph, not text
     color: 'var(--text-muted)',
     transition: 'transform 150ms ease',
     display: 'inline-block',
@@ -767,7 +767,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 1,
   },
   saName: {
-    fontSize: 9,
+    fontSize: 'var(--fs-xs)',
     color: 'var(--text-muted)',
     lineHeight: 1,
   },

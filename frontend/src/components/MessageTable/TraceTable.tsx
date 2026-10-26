@@ -14,9 +14,10 @@ import {
   type TraceRow,
 } from '../../store/frameStore';
 import { useFrameViewStore, formatByte } from '../../store/frameViewStore';
+import { useDensityStore } from '../../store/densityStore';
 import { canopenDetail, canopenTypeColor } from '../../utils/canopenDisplay';
 
-const ROW_HEIGHT = 22;
+const ROW_HEIGHT = { comfortable: 22, compact: 18 };
 const REFRESH_MS = 250;
 
 /** Protocol text for the Info column. */
@@ -41,6 +42,7 @@ export function TraceTable() {
   const paused = useFrameViewStore((s) => s.paused);
   const radix  = useFrameViewStore((s) => s.radix);
   const idText = useFrameStore((s) => s.filter.idText);
+  const rowHeight = ROW_HEIGHT[useDensityStore((s) => s.density)];
 
   const [rows, setRows] = useState<TraceRow[]>(traceSnapshot);
   const parentRef = useRef<HTMLDivElement>(null);
@@ -72,9 +74,12 @@ export function TraceTable() {
   const virtualizer = useVirtualizer({
     count: shown.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: 30,
   });
+
+  // Row height changed (density): drop the cached row positions
+  useEffect(() => { virtualizer.measure(); }, [rowHeight, virtualizer]);
 
   // Keep the newest frame in view while following
   useEffect(() => {
@@ -83,7 +88,7 @@ export function TraceTable() {
 
   const onScroll = () => {
     const el = parentRef.current;
-    if (el) follow.current = el.scrollTop + el.clientHeight >= el.scrollHeight - ROW_HEIGHT * 2;
+    if (el) follow.current = el.scrollTop + el.clientHeight >= el.scrollHeight - rowHeight * 2;
   };
 
   const t0 = traceStart();
@@ -91,12 +96,12 @@ export function TraceTable() {
   return (
     <div style={styles.root}>
       <div style={styles.header}>
-        <span style={{ ...styles.headCell, width: 50 }}>#</span>
-        <span style={{ ...styles.headCell, width: 90 }}>Time (s)</span>
-        <span style={{ ...styles.headCell, width: 90 }}>ID</span>
-        <span style={{ ...styles.headCell, width: 36 }}>DLC</span>
-        <span style={{ ...styles.headCell, width: 200 }}>Data</span>
-        <span style={{ ...styles.headCell, flex: 1 }}>Info</span>
+        <span className="section-label" style={{ ...styles.headCell, width: 50 }}>#</span>
+        <span className="section-label" style={{ ...styles.headCell, width: 90 }}>Time (s)</span>
+        <span className="section-label" style={{ ...styles.headCell, width: 90 }}>ID</span>
+        <span className="section-label" style={{ ...styles.headCell, width: 36 }}>DLC</span>
+        <span className="section-label" style={{ ...styles.headCell, width: 200 }}>Data</span>
+        <span className="section-label" style={{ ...styles.headCell, flex: 1 }}>Info</span>
         <span style={styles.count}>{shown.length.toLocaleString()} / {TRACE_MAX.toLocaleString()}</span>
       </div>
       <div ref={parentRef} style={styles.body} onScroll={onScroll}>
@@ -108,7 +113,7 @@ export function TraceTable() {
               const r = shown[vi.index];
               const info = infoOf(r);
               return (
-                <div key={r.seq} style={{ ...styles.row, top: vi.start }}>
+                <div key={r.seq} style={{ ...styles.row, top: vi.start, height: rowHeight }}>
                   <span className="mono" style={{ ...styles.cell, width: 50, color: 'var(--text-muted)' }}>{r.seq}</span>
                   <span className="mono" style={{ ...styles.cell, width: 90, color: 'var(--text-secondary)' }}
                     title={new Date(r.timeMs).toTimeString().slice(0, 8)}>
@@ -154,14 +159,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   headCell: {
     flexShrink: 0,
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    color: 'var(--text-muted)',
   },
   count: {
-    fontSize: 10,
+    fontSize: 'var(--fs-xs)',
     color: 'var(--text-muted)',
     paddingRight: 10,
   },
@@ -174,12 +174,11 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'absolute',
     left: 0,
     width: '100%',
-    height: ROW_HEIGHT,
     display: 'flex',
     alignItems: 'center',
     paddingLeft: 8,
     borderBottom: '1px solid var(--border-subtle)',
-    fontSize: 11,
+    fontSize: 'var(--fs-sm)',
   },
   cell: {
     flexShrink: 0,
@@ -191,7 +190,7 @@ const styles: Record<string, React.CSSProperties> = {
   empty: {
     padding: '40px 0',
     textAlign: 'center',
-    fontSize: 12,
+    fontSize: 'var(--fs-md)',
     color: 'var(--text-muted)',
   },
 };

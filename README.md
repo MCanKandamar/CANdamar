@@ -22,12 +22,15 @@ with cheap USB CAN adapters -- including STM32 boards running slcan firmware.
 
 ## What is new compared to CANviz
 
-- **Workspace tabs** -- Frames, CANopen, J1939 and Plot as Chrome-style tabs; split view shows two side by side
-- **Layout** -- collapsible sidebar (Ctrl+B), bottom panel collapse / maximize, plot that fills its tab
-- **slcan** -- normal / listen-only mode, full S0-S8 bitrate list, COM port list with adapter detection, RTR frames
+- **Tabs in three panes** -- Frames, CANopen, J1939, Plot, Send Frame, Record and Replay are all Chrome-style tabs; drag one to the right or bottom edge to open a pane there
+- **Frames** -- Monitor (one row per ID, changed bytes highlighted) and Trace (last 10,000 frames in order) views, pause, hex / decimal, resizable columns, compact density
+- **Layout** -- collapsible sidebar (Ctrl+B), bottom pane collapse / maximize, plot that fills its tab
+- **slcan** -- normal / listen-only mode, full S0-S8 bitrate list, COM port list with adapter detection, RTR frames, status flags (`F`): error warning / passive, bus error and overrun in the top bar
 - **CANopen SDO** -- segmented reads (e.g. device name), typed writes with byte preview, WRITE OK and decoded abort codes
-- **EDS object browser** -- every object of your EDS (including 0x2000+) with type and access, one-click Read / Write
-- **Plot without a DBC** -- pick a CAN ID, byte range, type, byte order and scale
+- **EDS object browser** -- every object of your EDS (including 0x2000+) with type and access, one-click Read / Write / Plot
+- **Plot** -- signal list grouped by source (DBC, PDO, SDO, custom), per-signal scale and unit, EDS objects read by SDO every 100 ms, raw-byte signals without a DBC
+- **CiA 402 drive control** -- mode of operation (0x6060), target velocity (0x60FF), every statusword bit
+- **Send Frame** -- save and load frame lists, CANopen templates (NMT, SYNC, SDO reads, controlword)
 - **Windows app** -- `CANdamar.exe`, no Python or Node.js needed
 
 See [CHANGELOG.md](docs/CHANGELOG.md) for details.
@@ -70,7 +73,9 @@ See [CHANGELOG.md](docs/CHANGELOG.md) for full version history.
 
 Every frame on the bus, in real time. ID, DLC, raw bytes, frame count, rate, and
 last-seen timestamp. Virtual scrolling handles thousands of rows without frame loss.
-Tested at 2,000 fps sustained with zero drops.
+Tested at 2,000 fps sustained with zero drops. Monitor view keeps one row per ID and
+highlights the bytes that changed; Trace view lists the last 10,000 frames in order.
+Pause freezes the view while frames are still received and recorded.
 
 ### DBC signal decoding
 
@@ -82,13 +87,15 @@ message table. Toggle between raw and decoded view at any time.
 Plot any decoded signal as a live time-series graph. Up to 8 signals on a shared time
 axis, 36,000 buffered points per signal, LTTB downsampling, 10 Hz render rate regardless
 of bus speed. Drag to zoom, double-click to resume live scroll, set per-signal threshold
-lines with breach alerts. One-click PNG export.
+lines with breach alerts. One-click PNG export. Signals are listed next to the plot by
+source; each can have its own scale and unit (e.g. mV shown as V).
 
 ### Multi-frame transmit with timers
 
 Build a list of frames, each with its own independent transmission interval. Send a
-heartbeat at 20 Hz and a speed signal at 10 Hz simultaneously. State persists across
-tab switches.
+heartbeat at 20 Hz and a speed signal at 10 Hz simultaneously. The list is kept across
+restarts and can be saved to / loaded from a JSON file; CANopen templates add NMT,
+SYNC, SDO read and controlword frames for a node.
 
 ### Record and replay
 
@@ -99,7 +106,9 @@ speed from 0.5x to 10x.
 
 Always-visible status bar: frames Rx/Tx, bus load %, error frame count, bus-off events,
 throughput. Error frame visibility depends on hardware -- slcan firmware typically drops
-error frames silently; a tooltip explains this when a slcan interface is active.
+error frames silently; a tooltip explains this when a slcan interface is active. slcan
+adapters that answer the status command (`F`) show the controller state instead:
+BUS OK, WARNING, PASSIVE, BUS ERR, OVERRUN.
 
 ### CLI and headless mode
 
@@ -290,7 +299,7 @@ Full interactive docs at `http://localhost:8080/docs` while running.
 - **USB timestamp jitter ~1 ms** -- a hardware limitation of USB-connected CAN adapters. Not suitable for sub-millisecond timing analysis.
 - **High bus load above 2,000 fps** -- untested. A server-side throttling hook is built in and can be enabled if needed.
 - **CAN FD** -- frames with >8 byte payloads display as raw hex. Full CAN FD UI is planned.
-- **slcan error frames** -- slcan firmware silently drops error frames before forwarding. Bus error statistics read 0% on slcan interfaces even on a degraded bus. Use gs_usb for accurate error visibility.
+- **slcan error frames** -- slcan firmware silently drops error frames before forwarding. Bus error statistics read 0% on slcan interfaces even on a degraded bus. Adapters that support the `F` status command still report error warning / passive, bus error and overrun in the top bar; use gs_usb for frame-level error visibility.
 - **Kvaser on Windows** -- CANdamar has full UI support. Connection fails due to a bug in python-can 4.6.1 (`canIoCtlInit` returning `canERR_PARAM`). Tracked at [python-can #2051](https://github.com/hardbyte/python-can/issues/2051). Upgrade python-can once resolved and Kvaser will work without any CANdamar changes.
 - **CANopen PDO decode** -- requires the device EDS file. Without EDS, TPDO1 bytes 0-1 are decoded as Statusword by default assumption; other PDO bytes are raw hex.
 - **CANopen SDO block transfer / segmented download** -- reads support expedited and segmented upload;
@@ -337,7 +346,7 @@ abort code in the SDO log for the exact reason.
 - [x] J1939 passive decoder -- PGN/SA decode, BAM reassembly, DM1 fault decode
 - [x] CANopen CiA 301 + CiA 402 -- NMT, EMCY, SDO, PDO, heartbeat, drive control
 - [x] CANdamar 0.4.0 -- workspace tabs, slcan listen-only, segmented SDO, EDS browser, Windows app
-- [ ] slcan status flags (`F`) -- error passive / bus-off from slcan adapters
+- [x] CANdamar 0.5.0 -- tabs in three panes, Trace view, plot signal list, SDO plotting, slcan status flags (`F`), drive control
 - [ ] CAN FD explicit UI support (>8 byte payloads, FDF/BRS/ESI flags)
 - [ ] OBD-II over raw CAN -- ISO 15765-4, no ELM327 required
 - [ ] UDS diagnostic panel -- ReadDataByIdentifier, ReadDTCInformation, ClearDTC

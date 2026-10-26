@@ -35,14 +35,18 @@ import can
 from can import Message
 
 from canviz.config import settings, InterfaceType
+from canviz.slcan_status import StatusSlcanBus
 
 log = logging.getLogger("canviz.bus")
+
+SLCAN_STATUS_INTERVAL_S = 1.0   # how often slcan adapters are asked for 'F' flags
 
 
 class BusManager:
     def __init__(self) -> None:
         self._bus: Optional[can.BusABC] = None
         self._reader_task: Optional[asyncio.Task] = None
+        self._status_task: Optional[asyncio.Task] = None
         self._connected: bool = False
         self._error: Optional[str] = None
         self._frame_callbacks: list[Callable[[Message], None]] = []
@@ -70,6 +74,16 @@ class BusManager:
     @property
     def error(self) -> Optional[str]:
         return self._error
+
+    def status_dict(self) -> dict:
+        """
+        Adapter status for the 1 s WebSocket stats push: the slcan 'F' flags
+        ({flags, recent, age_s}), or None for other interfaces.
+        """
+        bus = self._bus
+        if not self._connected or not isinstance(bus, StatusSlcanBus):
+            return {"slcan_status": None}
+        return {"slcan_status": bus.status.snapshot()}
 
     def add_frame_callback(self, cb: Callable[[Message], None]) -> None:
         if cb not in self._frame_callbacks:
@@ -146,6 +160,10 @@ class BusManager:
         self._reader_task = asyncio.get_event_loop().create_task(
             self._reader_loop(), name="can-reader"
         )
+        if isinstance(self._bus, StatusSlcanBus):
+            self._status_task = asyncio.get_event_loop().create_task(
+                self._status_loop(), name="slcan-status"
+            )
         log.info(
             "Connected: interface=%s channel=%s bitrate=%d%s",
             interface, channel, bitrate, " (listen-only)" if listen_only else "",
@@ -158,13 +176,15 @@ class BusManager:
         """
         self._connected = False
 
-        if self._reader_task:
-            self._reader_task.cancel()
-            try:
-                await self._reader_task
-            except asyncio.CancelledError:
-                pass
-            self._reader_task = None
+        for task in (self._reader_task, self._status_task):
+            if task:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        self._reader_task = None
+        self._status_task = None
 
         # Allow any in-flight recv() executor thread to return (recv timeout=0.1s)
         await asyncio.sleep(0.15)
@@ -235,6 +255,16 @@ class BusManager:
                     cb(msg)
                 except Exception as exc:
                     log.warning("Frame callback error on tx echo: %s", exc)
+
+    async def _status_loop(self) -> None:
+        """slcan only: ask for the status flags once a second ('F')."""
+        loop = asyncio.get_event_loop()
+        while self._connected and isinstance(self._bus, StatusSlcanBus):
+            try:
+                await loop.run_in_executor(None, self._bus.request_status)
+            except Exception as exc:
+                log.debug("slcan status request failed: %s", exc)
+            await asyncio.sleep(SLCAN_STATUS_INTERVAL_S)
 
     async def _reader_loop(self) -> None:
         log.debug("Reader loop started.")
@@ -367,11 +397,11 @@ def _open_bus(
             "Opening slcan: channel=%s  CAN bitrate=%d bps  serial baud=%d  mode=%s",
             channel, bitrate, serial_baudrate, "listen-only" if listen_only else "normal",
         )
-        # (open) command is sent *inside* can.Bus().__init__(). The settle
+        # (open) command is sent *inside* the bus constructor. The settle
         # time must come AFTER the bus is constructed so the adapter has time
         # to process that command before we start calling recv().
-        bus = can.Bus(
-            interface="slcan",
+        # StatusSlcanBus = python-can's slcan driver + 'F' status polling.
+        bus = StatusSlcanBus(
             channel=channel,
             bitrate=bitrate,
             ttyBaudrate=serial_baudrate,

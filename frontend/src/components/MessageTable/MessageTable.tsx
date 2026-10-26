@@ -1,20 +1,45 @@
-import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import { Fragment, useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
   type ColumnDef,
+  type ColumnSizingState,
   flexRender,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useFrameStore } from '../../store/frameStore';
+import { useFrameViewStore, formatByte } from '../../store/frameViewStore';
+import { useDensityStore } from '../../store/densityStore';
+import { TraceTable } from './TraceTable';
 import { useJ1939Store } from '../../store/j1939Store';
 import { useCANopenStore } from '../../store/canopenStore';
-import type { FrameRow, DecodedSignal, CANopenInfo } from '../../types/can';
-import { formatAbortCode, isSdoWriteResponse, sdoAbortCodeOf, sdoAbortText } from '../../utils/sdo';
+import type { FrameRow, DecodedSignal } from '../../types/can';
+import { canopenDetail, canopenTypeColor } from '../../utils/canopenDisplay';
 
 const FLASH_DURATION_MS = 400;
-const ROW_HEIGHT = 30;
+const ROW_HEIGHT = { comfortable: 30, compact: 22 };
 const SIGNAL_ROW_HEIGHT = 18;
+const HEADER_HEIGHT = 30;
+const EXPAND_WIDTH = 30;
+const MIN_COLUMN_WIDTH = 32;
+
+// Column widths set by dragging a header edge; double-click restores the default
+const SIZING_KEY = 'canviz:frameColumns';
+
+function loadColumnSizing(): ColumnSizingState {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SIZING_KEY) ?? '{}');
+    const out: ColumnSizingState = {};
+    if (raw && typeof raw === 'object') {
+      for (const [id, w] of Object.entries(raw)) {
+        if (typeof w === 'number' && w >= MIN_COLUMN_WIDTH) out[id] = w;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 // ── Flash tracker ─────────────────────────────────────────────────────────────
 const flashTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -58,6 +83,29 @@ function SignalRows({ signals }: { signals: DecodedSignal[] }) {
   );
 }
 
+// ── Data bytes with change highlight ──────────────────────────────────────────
+// A byte that differs from the previous frame of the same ID flashes amber.
+// The span's key includes the change time, so each change restarts the CSS
+// animation; unchanged bytes keep their element and do not flash again.
+function DataBytes({ row }: { row: FrameRow }) {
+  const radix = useFrameViewStore((s) => s.radix);
+  return (
+    <span className="mono" style={styles.dataCell}>
+      {row.data.map((b, i) => {
+        const changed = row.changedAt?.[i] ?? 0;
+        return (
+          <Fragment key={i}>
+            {i > 0 && ' '}
+            <span key={changed} className={changed ? 'byte-flash' : undefined}>
+              {formatByte(b, radix)}
+            </span>
+          </Fragment>
+        );
+      })}
+    </span>
+  );
+}
+
 // ── Base column definitions (always shown) ────────────────────────────────────
 const BASE_COLUMNS: ColumnDef<FrameRow>[] = [
   {
@@ -95,9 +143,7 @@ const BASE_COLUMNS: ColumnDef<FrameRow>[] = [
         remote request
       </span>
     ) : (
-      <span className="mono" style={styles.dataCell}>
-        {info.getValue<string>()}
-      </span>
+      <DataBytes row={info.row.original} />
     ),
   },
   {
@@ -205,63 +251,6 @@ const J1939_COLUMNS: ColumnDef<FrameRow>[] = [
   },
 ];
 
-// ── CANopen helpers ───────────────────────────────────────────────────────────
-
-const CANOPEN_TYPE_COLORS: Record<string, string> = {
-  NMT:        'var(--accent-amber)',
-  SYNC:       'var(--text-muted)',
-  TIME:       'var(--text-muted)',
-  EMCY:       'var(--accent-red)',
-  Heartbeat:  'var(--accent-green)',
-  TPDO1:      '#61afef',
-  TPDO2:      '#61afef',
-  TPDO3:      '#61afef',
-  TPDO4:      '#61afef',
-  RPDO1:      '#c678dd',
-  RPDO2:      '#c678dd',
-  RPDO3:      '#c678dd',
-  RPDO4:      '#c678dd',
-  'SDO-req':  'var(--text-muted)',
-  'SDO-resp': 'var(--accent-green)',
-};
-
-function canopenTypeColor(frameType: string): string {
-  return CANOPEN_TYPE_COLORS[frameType] ?? 'var(--text-secondary)';
-}
-
-function canopenDetail(co: CANopenInfo): string {
-  // SDO response with paired transaction -- show object name + value
-  if (co.sdo_transaction && co.sdo_transaction.object_name) {
-    const t = co.sdo_transaction;
-    if (t.is_abort) {
-      const code = sdoAbortCodeOf(t);
-      return `${t.object_name}: ABORT${code !== null ? ` ${formatAbortCode(code)} ${sdoAbortText(code)}` : ''}`;
-    }
-    if (isSdoWriteResponse(t)) return `${t.object_name}: WRITE OK`;
-    if (t.value_text) return `${t.object_name} = "${t.value_text}"`;
-    const val = t.data_hex ?? '';
-    return `${t.object_name}${val ? ' = ' + val : ''}`;
-  }
-  // Heartbeat -- just the NMT state
-  if (co.frame_type === 'Heartbeat' && co.nmt_state) {
-    return co.nmt_state;
-  }
-  // EMCY -- error name
-  if (co.frame_type === 'EMCY' && co.emcy) {
-    return co.emcy.error_name;
-  }
-  // NMT command
-  if (co.frame_type === 'NMT' && co.nmt) {
-    return co.nmt.description;
-  }
-  // PDO with signals (EDS decoded)
-  if (co.pdo_signals?.length) {
-    return co.pdo_signals.map((s) => `${s.name}=${s.value}`).join('  ');
-  }
-  // Generic detail string
-  return co.detail ?? '';
-}
-
 // ── CANopen column definitions ────────────────────────────────────────────────
 
 const CANOPEN_COLUMNS: ColumnDef<FrameRow>[] = [
@@ -318,7 +307,6 @@ const CANOPEN_COLUMNS: ColumnDef<FrameRow>[] = [
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: 'block',
-            maxWidth: 190,
           }}
           title={detail}
         >
@@ -328,8 +316,51 @@ const CANOPEN_COLUMNS: ColumnDef<FrameRow>[] = [
     },
   },
 ];
+// ── Frames tab: toolbar + Monitor or Trace view ───────────────────────────────
+
 export function MessageTable() {
-  const frameList   = useFrameStore((s) => s.frameList);
+  const view        = useFrameViewStore((s) => s.view);
+  const paused      = useFrameViewStore((s) => s.paused);
+  const setView     = useFrameViewStore((s) => s.setView);
+  const togglePause = useFrameViewStore((s) => s.togglePause);
+  const radix       = useFrameViewStore((s) => s.radix);
+  const setRadix    = useFrameViewStore((s) => s.setRadix);
+
+  return (
+    <div style={styles.wrapper}>
+      <div style={styles.toolbar}>
+        <div className="seg">
+          <button className={`seg-btn${view === 'monitor' ? ' active' : ''}`} onClick={() => setView('monitor')}
+            title="One row per CAN ID, updated in place">
+            Monitor
+          </button>
+          <button className={`seg-btn${view === 'trace' ? ' active' : ''}`} onClick={() => setView('trace')}
+            title="Every frame in time order (last 10,000)">
+            Trace
+          </button>
+        </div>
+        <div className="seg" title="Data bytes in hexadecimal or decimal">
+          <button className={`seg-btn${radix === 'hex' ? ' active' : ''}`} onClick={() => setRadix('hex')}>Hex</button>
+          <button className={`seg-btn${radix === 'dec' ? ' active' : ''}`} onClick={() => setRadix('dec')}>Dec</button>
+        </div>
+        <button className={`seg-btn solo${paused ? ' active warn' : ''}`} onClick={togglePause}
+          title={paused ? 'Resume the live view' : 'Freeze the view -- frames are still received and recorded'}>
+          {paused ? '▶ Resume' : '❚❚ Pause'}
+        </button>
+        {paused && <span style={styles.pausedNote}>view paused -- still receiving</span>}
+      </div>
+      {view === 'monitor' ? <MonitorTable /> : <TraceTable />}
+    </div>
+  );
+}
+
+function MonitorTable() {
+  const liveList    = useFrameStore((s) => s.frameList);
+  const paused      = useFrameViewStore((s) => s.paused);
+  // Paused: keep showing the list as it was when the view was frozen
+  const shownList   = useRef(liveList);
+  if (!paused) shownList.current = liveList;
+  const frameList   = shownList.current;
   const showDecoded = useFrameStore((s) => s.filter.showDecoded);
   const j1939Mode   = useJ1939Store((s) => s.mode);
   const canopenMode = useCANopenStore((s) => s.mode);
@@ -367,13 +398,24 @@ export function MessageTable() {
     return cols;
   }, [j1939Mode, canopenMode]);
 
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(loadColumnSizing);
+
+  useEffect(() => {
+    try { localStorage.setItem(SIZING_KEY, JSON.stringify(columnSizing)); } catch { /* ignore */ }
+  }, [columnSizing]);
+
   const table = useReactTable({
     data: frameList,
     columns,
+    state: { columnSizing },
+    onColumnSizingChange: setColumnSizing,
+    columnResizeMode: 'onChange',
+    defaultColumn: { minSize: MIN_COLUMN_WIDTH },
     getCoreRowModel: getCoreRowModel(),
   });
 
   const { rows } = table.getRowModel();
+  const rowHeight = ROW_HEIGHT[useDensityStore((s) => s.density)];
   const parentRef = useRef<HTMLDivElement>(null);
 
   const flatItems = useMemo(() => {
@@ -394,39 +436,63 @@ export function MessageTable() {
   const virtualizer = useVirtualizer({
     count: flatItems.length,
     getScrollElement: () => parentRef.current,
+    // Rows start below the sticky header inside the same scroll element
+    scrollMargin: HEADER_HEIGHT,
     estimateSize: (i) => {
       const item = flatItems[i];
       if (item.type === 'signals') {
         return item.signals.length * SIGNAL_ROW_HEIGHT + 8;
       }
-      return ROW_HEIGHT;
+      return rowHeight;
     },
     overscan: 20,
   });
 
+  // Row height changed (density): drop the cached row positions
+  useEffect(() => { virtualizer.measure(); }, [rowHeight, virtualizer]);
+
   const isEmpty = frameList.length === 0;
+  // The expand column is drawn separately with a fixed width
+  const rowWidth = EXPAND_WIDTH + table.getTotalSize() - table.getColumn('expand')!.getSize();
 
   return (
-    <div style={styles.wrapper}>
-      {/* Header */}
-      <div style={styles.header}>
-        {table.getHeaderGroups().map((hg) => (
-          <div key={hg.id} style={styles.headerRow}>
-            <div style={{ ...styles.headerCell, width: 30, flexShrink: 0 }} />
-            {hg.headers.slice(1).map((header) => (
-              <div
-                key={header.id}
-                style={{ ...styles.headerCell, width: header.getSize(), flexShrink: 0 }}
-              >
-                {flexRender(header.column.columnDef.header, header.getContext())}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* Virtualised body */}
+    <div style={styles.inner}>
+      {/* Header and virtualised body share one scroll element, so wide columns
+          scroll horizontally together */}
       <div ref={parentRef} style={styles.body}>
+        <div style={{ ...styles.header, minWidth: rowWidth }}>
+          {table.getHeaderGroups().map((hg) => (
+            <div key={hg.id} style={styles.headerRow}>
+              <div className="section-label" style={{ ...styles.headerCell, width: EXPAND_WIDTH, flexShrink: 0 }} />
+              {hg.headers.slice(1).map((header, i, all) => (
+                <div
+                  key={header.id}
+                  className="section-label"
+                  style={{
+                    ...styles.headerCell,
+                    width: header.getSize(),
+                    flexShrink: 0,
+                    // The last column takes the rest of the row
+                    flexGrow: i === all.length - 1 ? 1 : 0,
+                  }}
+                >
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                  <div
+                    style={{
+                      ...styles.resizer,
+                      background: header.column.getIsResizing() ? 'var(--accent-green)' : undefined,
+                    }}
+                    onMouseDown={header.getResizeHandler()}
+                    onTouchStart={header.getResizeHandler()}
+                    onDoubleClick={() => header.column.resetSize()}
+                    title="Drag to resize, double-click to reset"
+                  />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
         {isEmpty ? (
           <div style={styles.empty}>
             <span style={styles.emptyIcon}>◈</span>
@@ -434,7 +500,13 @@ export function MessageTable() {
             <span style={styles.emptyHint}>Connect to a CAN bus to start streaming</span>
           </div>
         ) : (
-          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          <div
+            style={{
+              height: virtualizer.getTotalSize(),
+              minWidth: rowWidth,
+              position: 'relative',
+            }}
+          >
             {virtualizer.getVirtualItems().map((vi) => {
               const item = flatItems[vi.index];
 
@@ -444,7 +516,7 @@ export function MessageTable() {
                     key={`sig-${item.frameId}`}
                     style={{
                       position: 'absolute',
-                      top: vi.start,
+                      top: vi.start - HEADER_HEIGHT,
                       width: '100%',
                       height: vi.size,
                     }}
@@ -458,6 +530,7 @@ export function MessageTable() {
               const frame = row.original;
               const isExpanded = expandedRows.has(frame.id);
               const hasSignals = (frame.decodedSignals?.length ?? 0) > 0;
+              const cells = row.getVisibleCells().slice(1);
 
               return (
                 <div
@@ -468,9 +541,9 @@ export function MessageTable() {
                   }}
                   style={{
                     position: 'absolute',
-                    top: vi.start,
+                    top: vi.start - HEADER_HEIGHT,
                     width: '100%',
-                    height: ROW_HEIGHT,
+                    height: rowHeight,
                     display: 'flex',
                     alignItems: 'center',
                     cursor: hasSignals ? 'pointer' : 'default',
@@ -490,54 +563,55 @@ export function MessageTable() {
                     )}
                   </div>
 
-                  {/* Data cells */}
-                  {row.getVisibleCells().slice(1).map((cell) => (
-                    <div
-                      key={cell.id}
-                      style={{ width: cell.column.getSize(), flexShrink: 0, paddingLeft: 8 }}
-                    >
+                  {/* Data cells -- the last one takes the rest of the row and holds the badges */}
+                  {cells.map((cell, i) => i < cells.length - 1 ? (
+                    <div key={cell.id} style={{ ...styles.cell, width: cell.column.getSize() }}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </div>
+                  ) : (
+                    <div key={cell.id} style={{ ...styles.lastCell, width: cell.column.getSize() }}>
+                      <div style={styles.lastCellContent}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </div>
+                      <div style={styles.badgeArea}>
+                        {frame.j1939?.is_bam_cm && (
+                          <span className="badge badge-blue" title="BAM Connection Management">BAM CM</span>
+                        )}
+                        {frame.j1939?.is_bam_dt && (
+                          <span className="badge badge-muted" title="BAM Data Transfer">BAM DT</span>
+                        )}
+                        {frame.j1939?.dm1_faults && frame.j1939.dm1_faults.length > 0 && (
+                          <span className="badge badge-red" title="Active Diagnostic Trouble Codes">
+                            DM1 ({frame.j1939.dm1_faults.length})
+                          </span>
+                        )}
+                        {frame.canopen?.frame_type === 'EMCY' && (
+                          <span className="badge badge-red" title={frame.canopen.emcy?.error_name ?? 'Emergency'}>
+                            EMCY
+                          </span>
+                        )}
+                        {frame.canopen?.sdo_transaction && (
+                          <span
+                            className="badge badge-green"
+                            title={frame.canopen.sdo_transaction.object_name ?? 'SDO paired'}
+                          >
+                            SDO
+                          </span>
+                        )}
+                        {/* EXT badge: only for extended-ID frames that are not J1939 or CANopen */}
+                        {frame.isExtended && !frame.j1939 && !frame.canopen && (
+                          <span className="badge badge-muted">EXT</span>
+                        )}
+                        {frame.isRemote && (
+                          <span className="badge badge-amber" title="Remote transmission request">RTR</span>
+                        )}
+                        {frame.isFd && <span className="badge badge-blue">FD</span>}
+                        {showDecoded && frame.decodedSignals?.length ? (
+                          <span className="badge badge-green">DBC</span>
+                        ) : null}
+                      </div>
+                    </div>
                   ))}
-
-                  {/* Badges */}
-                  <div style={styles.badgeArea}>
-                    {frame.j1939?.is_bam_cm && (
-                      <span className="badge badge-blue" title="BAM Connection Management">BAM CM</span>
-                    )}
-                    {frame.j1939?.is_bam_dt && (
-                      <span className="badge badge-muted" title="BAM Data Transfer">BAM DT</span>
-                    )}
-                    {frame.j1939?.dm1_faults && frame.j1939.dm1_faults.length > 0 && (
-                      <span className="badge badge-red" title="Active Diagnostic Trouble Codes">
-                        DM1 ({frame.j1939.dm1_faults.length})
-                      </span>
-                    )}
-                    {frame.canopen?.frame_type === 'EMCY' && (
-                      <span className="badge badge-red" title={frame.canopen.emcy?.error_name ?? 'Emergency'}>
-                        EMCY
-                      </span>
-                    )}
-                    {frame.canopen?.sdo_transaction && (
-                      <span
-                        className="badge badge-green"
-                        title={frame.canopen.sdo_transaction.object_name ?? 'SDO paired'}
-                      >
-                        SDO
-                      </span>
-                    )}
-                    {/* EXT badge: only for extended-ID frames that are not J1939 or CANopen */}
-                    {frame.isExtended && !frame.j1939 && !frame.canopen && (
-                      <span className="badge badge-muted">EXT</span>
-                    )}
-                    {frame.isRemote && (
-                      <span className="badge badge-amber" title="Remote transmission request">RTR</span>
-                    )}
-                    {frame.isFd && <span className="badge badge-blue">FD</span>}
-                    {showDecoded && frame.decodedSignals?.length ? (
-                      <span className="badge badge-green">DBC</span>
-                    ) : null}
-                  </div>
                 </div>
               );
             })}
@@ -557,47 +631,102 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     background: 'var(--bg-base)',
   },
+  inner: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  toolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    height: 32,
+    flexShrink: 0,
+    padding: '0 8px',
+    borderBottom: '1px solid var(--border-subtle)',
+    background: 'var(--bg-panel)',
+  },
+  pausedNote: {
+    fontSize: 'var(--fs-sm)',
+    color: 'var(--accent-amber)',
+  },
   header: {
+    position: 'sticky',
+    top: 0,
+    zIndex: 1,
     background: 'var(--bg-panel)',
     borderBottom: '1px solid var(--border-subtle)',
-    flexShrink: 0,
   },
   headerRow: {
     display: 'flex',
     alignItems: 'center',
-    height: 30,
+    height: HEADER_HEIGHT,
   },
   headerCell: {
+    position: 'relative',
+    alignSelf: 'stretch',
+    display: 'flex',
+    alignItems: 'center',
     paddingLeft: 8,
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    color: 'var(--text-muted)',
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+  },
+  cell: {
+    flexShrink: 0,
+    paddingLeft: 8,
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+    textOverflow: 'ellipsis',
+  },
+  resizer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 5,
+    height: '100%',
+    cursor: 'col-resize',
     userSelect: 'none',
+    touchAction: 'none',
+    borderRight: '1px solid var(--border-subtle)',
   },
   body: {
     flex: 1,
-    overflowY: 'auto',
-    overflowX: 'hidden',
+    minHeight: 0,
+    overflow: 'auto',
   },
   expandCell: {
-    width: 30,
+    width: EXPAND_WIDTH,
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   expandIcon: {
-    fontSize: 8,
+    fontSize: 8,      // the ▶ glyph, not text
     color: 'var(--text-muted)',
     transition: 'transform 150ms ease',
     display: 'inline-block',
   },
-  badgeArea: {
-    flex: 1,
+  lastCell: {
+    flex: '1 0 auto',
     display: 'flex',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 8,
+    minWidth: 0,
+  },
+  lastCellContent: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+    textOverflow: 'ellipsis',
+  },
+  badgeArea: {
+    display: 'flex',
+    flexShrink: 0,
     gap: 4,
     paddingRight: 10,
   },
@@ -610,6 +739,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     color: 'var(--text-primary)',
     letterSpacing: '0.04em',
+    whiteSpace: 'pre',      // keeps the padding of decimal bytes
   },
   timeCell: {
     fontSize: 10,
@@ -630,7 +760,6 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     display: 'block',
-    maxWidth: 174,
   },
   saCell: {
     display: 'flex',
@@ -638,7 +767,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 1,
   },
   saName: {
-    fontSize: 9,
+    fontSize: 'var(--fs-xs)',
     color: 'var(--text-muted)',
     lineHeight: 1,
   },

@@ -1,10 +1,14 @@
 name: CI
 
 on:
-  push:
-    branches: ["main"]
+  push:            # every branch, so work branches are checked before a PR
   pull_request:
     branches: ["main"]
+
+# A newer push to the same branch cancels the run that is still going
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ── Backend — lint + tests ───────────────────────────────────────────────
@@ -13,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
 

@@ -1,6 +1,8 @@
 import { useEffect, type MutableRefObject } from 'react';
 import type uPlot from 'uplot';
-import { getSignalBuffer, readBuffer, DISPLAY_POINTS, getLatestTimestamp } from '../store/plotStore';
+import {
+  getSignalBuffer, readBuffer, DISPLAY_POINTS, getLatestTimestamp, getSignalScale,
+} from '../store/plotStore';
 import { lttb } from '../utils/lttb';
 
 const TARGET_HZ          = 10;
@@ -36,7 +38,8 @@ function buildAlignedData(
     const [winTs, winVs] = clipToWindow(rawTs, rawVs, windowSec);
     if (winTs.length === 0) { perSignal.push({ ts: [], vs: [] }); continue; }
     const [dTs, dVs] = lttb(winTs, winVs, DISPLAY_POINTS);
-    perSignal.push({ ts: dTs, vs: dVs });
+    const scale = getSignalScale(key);
+    perSignal.push({ ts: dTs, vs: scale === 1 ? dVs : dVs.map((v) => v * scale) });
   }
 
   const tsSet = new Set<number>();

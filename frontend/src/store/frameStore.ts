@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CanFrame, FrameRow, FilterState } from '../types/can';
 import { usePlotStore } from './plotStore';
-import { addSignalValues } from './plotStore';
+import { addSignalValues, pdoMessageName, sdoMessageName } from './plotStore';
 import { decodeCustomSignals } from './customSignalStore';
 
 // Rolling window duration for rate calculation (ms)
@@ -28,8 +28,52 @@ function dataToHex(data: number[]): string {
   return data.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
 }
 
+// ── Trace: time-ordered copy of the last TRACE_MAX frames ─────────────────────
+// A ring buffer outside zustand, so appending stays cheap at high frame
+// rates. The Trace view copies it out a few times a second.
+
+export const TRACE_MAX = 10_000;
+
+export type TraceRow = Omit<FrameRow, 'count' | 'rate' | 'lastSeen' | 'flashKey' | 'changedAt'> & {
+  seq:    number;   // running frame number since the last clear
+  timeMs: number;   // arrival time (Date.now())
+};
+
+const traceBuf: TraceRow[] = [];
+let traceHead    = 0;     // next write position once the buffer is full
+let traceSeq     = 0;
+let traceStartMs = 0;
+
+function pushTrace(row: TraceRow): void {
+  if (traceBuf.length < TRACE_MAX) traceBuf.push(row);
+  else {
+    traceBuf[traceHead] = row;
+    traceHead = (traceHead + 1) % TRACE_MAX;
+  }
+}
+
+/** Sequence number of the newest traced frame (changes on every frame). */
+export const traceVersion = () => traceSeq;
+
+/** Arrival time of the first frame since the last clear (trace time zero). */
+export const traceStart = () => traceStartMs;
+
+/** The traced frames, oldest first. */
+export function traceSnapshot(): TraceRow[] {
+  return traceBuf.length < TRACE_MAX
+    ? traceBuf.slice()
+    : [...traceBuf.slice(traceHead), ...traceBuf.slice(0, traceHead)];
+}
+
+function clearTrace(): void {
+  traceBuf.length = 0;
+  traceHead = 0;
+  traceSeq = 0;
+  traceStartMs = 0;
+}
+
 // Parse filter input: supports "1A2", "0x1A2", "100-200", "0x100-0x1FF"
-function parseIdFilter(text: string): { min?: number; max?: number } {
+export function parseIdFilter(text: string): { min?: number; max?: number } {
   const t = text.trim();
   if (!t) return {};
   const rangeParts = t.split('-').map((p) => p.trim());
@@ -86,6 +130,10 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
     const rate = calcRate(numericId, nowMs);
 
     const existing = store.frames.get(numericId);
+    // Bytes that differ from the previous frame of this ID (Monitor highlight)
+    const changedAt = frame.data.map((b, i) =>
+      existing && existing.data[i] !== b ? nowMs : existing?.changedAt?.[i] ?? 0,
+    );
     const updated: FrameRow = {
       id:             numericId,
       idHex:          toHex(numericId, frame.is_extended_id),
@@ -99,10 +147,28 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
       isRemote:       frame.is_remote_frame ?? false,
       isFd:           frame.is_fd,
       flashKey:       nowMs,
+      changedAt,
       decodedSignals: signals,
       j1939:          frame.j1939,   // ← carry J1939 decode through to the table row
       canopen:        frame.canopen,   // ← carry CANopen decode through to the table row
     };
+
+    if (traceSeq === 0) traceStartMs = nowMs;
+    pushTrace({
+      seq:            ++traceSeq,
+      timeMs:         nowMs,
+      id:             updated.id,
+      idHex:          updated.idHex,
+      dlc:            updated.dlc,
+      data:           updated.data,
+      dataHex:        updated.dataHex,
+      isExtended:     updated.isExtended,
+      isRemote:       updated.isRemote,
+      isFd:           updated.isFd,
+      decodedSignals: updated.decodedSignals,
+      j1939:          updated.j1939,
+      canopen:        updated.canopen,
+    });
 
     if (signals?.length) {
       const tSec = nowMs / 1000;
@@ -114,13 +180,25 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
     // We synthesise message_name from node_id so the plot key matches other signals.
     if (frame.canopen?.pdo_signals?.length && frame.canopen.node_id != null) {
       const tSec = nowMs / 1000;
-      const msgName = `CANopen 0x${frame.canopen.node_id.toString(16).toUpperCase().padStart(2, '0')}`;
+      const msgName = pdoMessageName(frame.canopen.node_id);
       const pdoSignals = frame.canopen.pdo_signals.map((sig) => ({
         name:         sig.name,
         message_name: msgName,
         value:        sig.value,
+        unit:         sig.unit,
       }));
       addSignalValues(pdoSignals, tSec);
+    }
+
+    // Feed values of expedited SDO uploads seen on the bus (any SDO client)
+    const sdo = frame.canopen?.sdo_transaction;
+    if (sdo && !sdo.is_abort && sdo.response_cmd.startsWith('Upload Response (expedited')
+        && sdo.value_int != null) {
+      addSignalValues([{
+        name:         sdo.object_name || `${sdo.index}:${sdo.subindex}`,
+        message_name: sdoMessageName(sdo.node_id),
+        value:        sdo.value ?? sdo.value_int,
+      }], nowMs / 1000);
     }
 
     // Feed DBC-less custom signals (defined in the Plot tab) into the plot store
@@ -146,6 +224,7 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
 
   clearFrames: () => {
     rateBuckets.clear();
+    clearTrace();
     usePlotStore.getState().clearBuffers();
     set({
       frames: new Map(),

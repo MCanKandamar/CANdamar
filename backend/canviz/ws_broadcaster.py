@@ -22,6 +22,7 @@ from typing import Optional
 from fastapi import WebSocket
 from starlette.websockets import WebSocketState
 
+from canviz.bus import bus_manager
 from canviz.dbc_store import dbc_store
 from canviz.j1939_store import j1939_store
 from canviz.canopen_store import canopen_store
@@ -187,6 +188,7 @@ class WSBroadcaster:
                 **stats.snapshot(),
                 **j1939_store.status_dict(),
                 **canopen_store.status_dict(),
+                **bus_manager.status_dict(),
             })
 
             dead: list[WebSocket] = []

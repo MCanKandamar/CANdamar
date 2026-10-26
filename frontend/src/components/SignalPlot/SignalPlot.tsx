@@ -2,9 +2,10 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import uPlot from 'uplot';
 import { usePlot } from '../../hooks/usePlot';
 import { usePlotRenderLoop } from '../../hooks/usePlotRenderLoop';
-import { usePlotStore, SIGNAL_COLORS, MAX_SIGNALS, getLatestValue } from '../../store/plotStore';
+import { usePlotStore, SIGNAL_COLORS, getLatestValue, displayUnit } from '../../store/plotStore';
 import { useThemeStore } from '../../store/themeStore';
 import { CustomSignalForm } from './CustomSignalForm';
+import { SignalList } from './SignalList';
 
 // ── Theme helper ─────────────────────────────────────────────────────────────
 // Reads CSS custom properties at render time so uPlot canvas colours
@@ -35,6 +36,8 @@ export function SignalPlot() {
   const toggleSignal     = usePlotStore((s) => s.toggleSignal);
   const windowSec        = usePlotStore((s) => s.windowSec);
   const setWindowSec     = usePlotStore((s) => s.setWindowSec);
+  const signalUnits      = usePlotStore((s) => s.signalUnits);
+  const signalScales     = usePlotStore((s) => s.signalScales);
 
   // Subscribe to theme so opts rebuild on switch
   const theme = useThemeStore((s) => s.theme);
@@ -94,8 +97,6 @@ export function SignalPlot() {
   }, [selectedSignals]);
 
   // ── uPlot opts (rebuilt when signals or theme changes) ──────────────────
-  const unselected = availableSignals.filter((k) => !selectedSignals.includes(k));
-
   const emptyData: uPlot.AlignedData = useMemo(
     () => [[], ...selectedSignals.map(() => [])],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,7 +112,8 @@ export function SignalPlot() {
       series: [
         {},
         ...selectedSignals.map((key, i) => ({
-          label:    key,
+          label:    displayUnit(key, signalScales, signalUnits)
+            ? `${key} [${displayUnit(key, signalScales, signalUnits)}]` : key,
           stroke:   SIGNAL_COLORS[i % SIGNAL_COLORS.length],
           width:    2,
           fill:     SIGNAL_COLORS[i % SIGNAL_COLORS.length] + '10',
@@ -170,9 +172,9 @@ export function SignalPlot() {
   // theme is the key dep — forces opts rebuild when switching modes
   // thresholdsRef and breachedRef are stable refs, intentionally excluded
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSignals, theme]);
+  }, [selectedSignals, theme, signalScales, signalUnits]);
 
-  const { containerRef, plotRef } = usePlot(opts, emptyData, [selectedSignals.join(','), theme]);
+  const { containerRef, plotRef } = usePlot(opts, emptyData, [selectedSignals.join(','), theme, signalScales]);
   usePlotRenderLoop(plotRef, selectedSignals, windowSec, isPausedRef, onPausedChange);
 
   // ── Drag / zoom handlers ────────────────────────────────────────────────
@@ -192,91 +194,93 @@ export function SignalPlot() {
       flex: 1,
       minHeight: 0,
       display: 'flex',
-      flexDirection: 'column',
       padding: '12px 16px',
       background: 'var(--bg-elevated)',
       borderRadius: '8px',
       border: '1px solid var(--border-subtle)',
     }}>
 
-      {/* Header — signal pills + controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+      <SignalList />
 
-        {selectedSignals.map((key, i) => {
-          const isBreached = breached.has(key);
-          const color      = SIGNAL_COLORS[i % SIGNAL_COLORS.length];
-          return (
-            <div key={key} style={{
-              display: 'flex', alignItems: 'center', gap: '4px',
-              background: 'var(--bg-panel)',
-              border: `1px solid ${isBreached ? 'var(--accent-red)' : color + '40'}`,
-              borderRadius: '4px',
-              padding: '2px 4px 2px 7px',
-              transition: 'border-color 0.2s',
-            }}>
-              {/* Colour dot */}
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
 
-              {/* Signal name */}
-              <span style={{
-                fontSize: '11px',
-                fontFamily: 'monospace',
-                color: 'var(--text-primary)',
-              }}>{key}</span>
+        {/* Header — signal pills + controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
 
-              {/* Threshold input */}
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="limit"
-                value={thresholds[key] !== undefined ? String(thresholds[key]) : ''}
-                onChange={(e) => handleThresholdChange(key, e.target.value)}
-                title="Threshold — line turns red when signal exceeds this value"
-                style={{
-                  width: 46,
-                  background: 'transparent',
-                  border: 'none',
-                  borderLeft: `1px solid ${isBreached ? 'var(--accent-red)' : 'var(--border-default)'}`,
-                  color: isBreached ? 'var(--accent-red)' : 'var(--text-secondary)',
-                  fontSize: '10px',
+          {selectedSignals.map((key, i) => {
+            const isBreached = breached.has(key);
+            const color      = SIGNAL_COLORS[i % SIGNAL_COLORS.length];
+            return (
+              <div key={key} style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                background: 'var(--bg-panel)',
+                border: `1px solid ${isBreached ? 'var(--accent-red)' : color + '40'}`,
+                borderRadius: '4px',
+                padding: '2px 4px 2px 7px',
+                transition: 'border-color 0.2s',
+              }}>
+                {/* Colour dot */}
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+
+                {/* Signal name */}
+                <span style={{
+                  fontSize: '11px',
                   fontFamily: 'monospace',
-                  padding: '0 4px',
-                  outline: 'none',
-                  marginLeft: '2px',
-                }}
-              />
+                  color: 'var(--text-primary)',
+                }}>{key}</span>
 
-              {/* Breach indicator */}
-              {isBreached && (
-                <span style={{ fontSize: '10px', color: 'var(--accent-red)' }} title="Threshold exceeded">⚠</span>
-              )}
+                {/* Threshold input */}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="limit"
+                  value={thresholds[key] !== undefined ? String(thresholds[key]) : ''}
+                  onChange={(e) => handleThresholdChange(key, e.target.value)}
+                  title="Threshold — line turns red when signal exceeds this value"
+                  style={{
+                    width: 46,
+                    background: 'transparent',
+                    border: 'none',
+                    borderLeft: `1px solid ${isBreached ? 'var(--accent-red)' : 'var(--border-default)'}`,
+                    color: isBreached ? 'var(--accent-red)' : 'var(--text-secondary)',
+                    fontSize: '10px',
+                    fontFamily: 'monospace',
+                    padding: '0 4px',
+                    outline: 'none',
+                    marginLeft: '2px',
+                  }}
+                />
 
-              {/* Remove button */}
-              <button
-                onClick={() => handleRemoveSignal(key)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  lineHeight: 1,
-                  padding: '0 2px',
-                }}
-                title={`Remove ${key}`}
-              >×</button>
-            </div>
-          );
-        })}
+                {/* Breach indicator */}
+                {isBreached && (
+                  <span style={{ fontSize: '10px', color: 'var(--accent-red)' }} title="Threshold exceeded">⚠</span>
+                )}
 
-        {/* Add signal */}
-        {selectedSignals.length < MAX_SIGNALS && (
-          <select
-            value=""
-            onChange={(e) => { if (e.target.value) toggleSignal(e.target.value); }}
+                {/* Remove button */}
+                <button
+                  onClick={() => handleRemoveSignal(key)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    lineHeight: 1,
+                    padding: '0 2px',
+                  }}
+                  title={`Remove ${key}`}
+                >×</button>
+              </div>
+            );
+          })}
+
+          {/* DBC-less signal from raw bytes */}
+          <button
+            onClick={() => setShowCustom((v) => !v)}
+            title="Plot raw bytes of any CAN ID without a DBC file"
             style={{
-              background: 'var(--bg-panel)',
-              color: 'var(--text-secondary)',
+              background: showCustom ? 'var(--accent-green-dim)' : 'var(--bg-panel)',
+              color: showCustom ? 'var(--accent-green)' : 'var(--text-secondary)',
               border: '1px dashed var(--border-strong)',
               borderRadius: '4px',
               padding: '3px 8px',
@@ -285,171 +289,148 @@ export function SignalPlot() {
               cursor: 'pointer',
             }}
           >
-            <option value="">
-              {availableSignals.length === 0 ? '- load DBC & connect -' : '+ add signal'}
-            </option>
-            {unselected.map((key) => (
-              <option key={key} value={key}>{key}</option>
-            ))}
-          </select>
-        )}
+            + custom signal
+          </button>
 
-        {/* DBC-less signal from raw bytes */}
-        <button
-          onClick={() => setShowCustom((v) => !v)}
-          title="Plot raw bytes of any CAN ID without a DBC file"
-          style={{
-            background: showCustom ? 'var(--accent-green-dim)' : 'var(--bg-panel)',
-            color: showCustom ? 'var(--accent-green)' : 'var(--text-secondary)',
-            border: '1px dashed var(--border-strong)',
-            borderRadius: '4px',
-            padding: '3px 8px',
-            fontSize: '11px',
-            fontFamily: 'monospace',
-            cursor: 'pointer',
-          }}
-        >
-          + custom signal
-        </button>
+          <div style={{ flex: 1 }} />
 
-        <div style={{ flex: 1 }} />
+          {/* PNG Export */}
+          {selectedSignals.length > 0 && (
+            <button
+              onClick={() => {
+                const canvas = containerRef.current?.querySelector('canvas');
+                if (!canvas) return;
 
-        {/* PNG Export */}
-        {selectedSignals.length > 0 && (
-          <button
-            onClick={() => {
-              const canvas = containerRef.current?.querySelector('canvas');
-              if (!canvas) return;
+                const legendH   = 20 + Math.ceil(selectedSignals.length / 3) * 20;
+                const offscreen = document.createElement('canvas');
+                offscreen.width  = canvas.width;
+                offscreen.height = canvas.height + legendH;
 
-              const legendH   = 20 + Math.ceil(selectedSignals.length / 3) * 20;
-              const offscreen = document.createElement('canvas');
-              offscreen.width  = canvas.width;
-              offscreen.height = canvas.height + legendH;
+                const ctx = offscreen.getContext('2d');
+                if (!ctx) return;
 
-              const ctx = offscreen.getContext('2d');
-              if (!ctx) return;
+                // Use the current plot background token for the export canvas
+                const pt = getPlotTheme();
+                ctx.fillStyle = pt.bg;
+                ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+                ctx.drawImage(canvas, 0, 0);
 
-              // Use the current plot background token for the export canvas
-              const pt = getPlotTheme();
-              ctx.fillStyle = pt.bg;
-              ctx.fillRect(0, 0, offscreen.width, offscreen.height);
-              ctx.drawImage(canvas, 0, 0);
+                ctx.font         = '11px monospace';
+                ctx.textBaseline = 'middle';
+                const colW = Math.floor(offscreen.width / Math.min(selectedSignals.length, 3));
+                selectedSignals.forEach((key, i) => {
+                  const col = i % 3;
+                  const row = Math.floor(i / 3);
+                  const x   = col * colW + 12;
+                  const y   = canvas.height + 10 + row * 20;
 
-              ctx.font         = '11px monospace';
-              ctx.textBaseline = 'middle';
-              const colW = Math.floor(offscreen.width / Math.min(selectedSignals.length, 3));
-              selectedSignals.forEach((key, i) => {
-                const col = i % 3;
-                const row = Math.floor(i / 3);
-                const x   = col * colW + 12;
-                const y   = canvas.height + 10 + row * 20;
+                  ctx.fillStyle = SIGNAL_COLORS[i % SIGNAL_COLORS.length];
+                  ctx.beginPath();
+                  ctx.arc(x + 4, y, 4, 0, Math.PI * 2);
+                  ctx.fill();
 
-                ctx.fillStyle = SIGNAL_COLORS[i % SIGNAL_COLORS.length];
-                ctx.beginPath();
-                ctx.arc(x + 4, y, 4, 0, Math.PI * 2);
-                ctx.fill();
+                  ctx.fillStyle = pt.text;
+                  ctx.fillText(key, x + 14, y);
+                });
 
-                ctx.fillStyle = pt.text;
-                ctx.fillText(key, x + 14, y);
-              });
+                offscreen.toBlob((blob) => {
+                  if (!blob) return;
+                  const url = URL.createObjectURL(blob);
+                  const a   = document.createElement('a');
+                  a.href     = url;
+                  a.download = `candamar_${selectedSignals[0]?.split('.')[0] ?? 'plot'}_${Date.now()}.png`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                });
+              }}
+              title="Export plot as PNG"
+              style={{
+                background: 'none',
+                border: '1px solid var(--border-default)',
+                borderRadius: '4px',
+                color: 'var(--text-secondary)',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                padding: '3px 8px',
+                cursor: 'pointer',
+              }}
+            >
+              ↓ PNG
+            </button>
+          )}
 
-              offscreen.toBlob((blob) => {
-                if (!blob) return;
-                const url = URL.createObjectURL(blob);
-                const a   = document.createElement('a');
-                a.href     = url;
-                a.download = `candamar_${selectedSignals[0]?.split('.')[0] ?? 'plot'}_${Date.now()}.png`;
-                a.click();
-                URL.revokeObjectURL(url);
-              });
-            }}
-            title="Export plot as PNG"
+          {/* Live / Paused indicator */}
+          {selectedSignals.length > 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              fontSize: '11px', fontFamily: 'monospace',
+              color: isPaused ? 'var(--accent-amber)' : 'var(--accent-green)',
+            }}>
+              <div style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: isPaused ? 'var(--accent-amber)' : 'var(--accent-green)',
+                boxShadow: isPaused ? 'none' : '0 0 6px var(--accent-green-glow)',
+              }} />
+              {isPaused ? 'PAUSED · double-click to resume' : 'LIVE'}
+            </div>
+          )}
+
+          {/* Window selector */}
+          <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontFamily: 'monospace' }}>
+            WINDOW
+          </span>
+          <select
+            value={windowSec}
+            onChange={(e) => setWindowSec(Number(e.target.value))}
             style={{
-              background: 'none',
+              background: 'var(--bg-panel)',
+              color: 'var(--text-primary)',
               border: '1px solid var(--border-default)',
               borderRadius: '4px',
-              color: 'var(--text-secondary)',
-              fontSize: '11px',
-              fontFamily: 'monospace',
               padding: '3px 8px',
+              fontSize: '12px',
+              fontFamily: 'monospace',
               cursor: 'pointer',
             }}
           >
-            ↓ PNG
-          </button>
-        )}
+            <option value={10}>10s</option>
+            <option value={30}>30s</option>
+            <option value={60}>1m</option>
+            <option value={300}>5m</option>
+            <option value={1800}>30m</option>
+          </select>
+        </div>
 
-        {/* Live / Paused indicator */}
-        {selectedSignals.length > 0 && (
+        {showCustom && <CustomSignalForm onClose={() => setShowCustom(false)} />}
+
+        {/* Plot canvas or empty state */}
+        {selectedSignals.length > 0 ? (
+          <div
+            ref={containerRef}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMouseUp}
+            onDoubleClick={handleDoubleClick}
+            style={{ flex: 1, minHeight: 0, overflow: 'hidden', cursor: isPaused ? 'zoom-out' : 'crosshair' }}
+          />
+        ) : (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: '5px',
-            fontSize: '11px', fontFamily: 'monospace',
-            color: isPaused ? 'var(--accent-amber)' : 'var(--accent-green)',
-          }}>
-            <div style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: isPaused ? 'var(--accent-amber)' : 'var(--accent-green)',
-              boxShadow: isPaused ? 'none' : '0 0 6px var(--accent-green-glow)',
-            }} />
-            {isPaused ? 'PAUSED · double-click to resume' : 'LIVE'}
-          </div>
-        )}
-
-        {/* Window selector */}
-        <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontFamily: 'monospace' }}>
-          WINDOW
-        </span>
-        <select
-          value={windowSec}
-          onChange={(e) => setWindowSec(Number(e.target.value))}
-          style={{
-            background: 'var(--bg-panel)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border-default)',
-            borderRadius: '4px',
-            padding: '3px 8px',
+            flex: 1,
+            minHeight: 160,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--text-muted)',
             fontSize: '12px',
             fontFamily: 'monospace',
-            cursor: 'pointer',
-          }}
-        >
-          <option value={10}>10s</option>
-          <option value={30}>30s</option>
-          <option value={60}>1m</option>
-          <option value={300}>5m</option>
-          <option value={1800}>30m</option>
-        </select>
+            border: '1px dashed var(--border-subtle)',
+            borderRadius: '4px',
+          }}>
+            {availableSignals.length === 0
+              ? 'No signals yet — the list on the left says how to get them'
+              : 'Tick a signal on the left to plot it'}
+          </div>
+        )}
       </div>
-
-      {showCustom && <CustomSignalForm onClose={() => setShowCustom(false)} />}
-
-      {/* Plot canvas or empty state */}
-      {selectedSignals.length > 0 ? (
-        <div
-          ref={containerRef}
-          onMouseDown={handleMouseDown}
-          onMouseUp={handleMouseUp}
-          onDoubleClick={handleDoubleClick}
-          style={{ flex: 1, minHeight: 0, overflow: 'hidden', cursor: isPaused ? 'zoom-out' : 'crosshair' }}
-        />
-      ) : (
-        <div style={{
-          flex: 1,
-          minHeight: 160,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--text-muted)',
-          fontSize: '12px',
-          fontFamily: 'monospace',
-          border: '1px dashed var(--border-subtle)',
-          borderRadius: '4px',
-        }}>
-          {availableSignals.length === 0
-            ? 'No decoded signals — load a DBC file, or use "+ custom signal" to plot raw bytes'
-            : 'Add a signal above to begin plotting'}
-        </div>
-      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useConnectionStore } from '../../store/connectionStore';
-import { useStatsStore } from '../../store/statsStore';
+import { useStatsStore, type SlcanStatus } from '../../store/statsStore';
+import { useDensityStore } from '../../store/densityStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useLayoutStore } from '../../store/layoutStore';
 
@@ -50,11 +51,60 @@ function SidebarIcon({ open }: { open: boolean }) {
   );
 }
 
+// slcan 'F' status bits worth showing, most severe first
+const SLCAN_FLAGS: { bit: number; label: string; color: string; title: string }[] = [
+  { bit: 0x80, label: 'BUS ERR',  color: 'var(--accent-red)',   title: 'Bus error, or the controller is bus-off' },
+  { bit: 0x20, label: 'PASSIVE',  color: 'var(--accent-red)',   title: 'Error passive: error counter above 127' },
+  { bit: 0x04, label: 'WARNING',  color: 'var(--accent-amber)', title: 'Error warning: error counter above 96' },
+  { bit: 0x08, label: 'OVERRUN',  color: 'var(--accent-amber)', title: 'Data overrun: the adapter dropped received frames' },
+  { bit: 0x01, label: 'RX FULL',  color: 'var(--accent-amber)', title: 'The adapter receive queue is full' },
+  { bit: 0x02, label: 'TX FULL',  color: 'var(--accent-amber)', title: 'The adapter transmit queue is full' },
+  { bit: 0x40, label: 'ARB LOST', color: 'var(--text-secondary)', title: 'Arbitration lost while sending' },
+];
+
+const STALE_S = 3;   // no 'F' answer for this long: the adapter does not support it
+
+/** Bus state reported by the slcan adapter ('F' polled once a second). */
+function SlcanFlags({ status }: { status: SlcanStatus }) {
+  if (status.flags === null || (status.age_s ?? 0) > STALE_S) return null;
+  const active = SLCAN_FLAGS.filter((f) => status.recent & f.bit);
+  const hex = `F${status.flags.toString(16).toUpperCase().padStart(2, '0')}`;
+  return (
+    <>
+      <div style={styles.stat} title={`slcan status flags (last answer ${hex}, shown for 5 s after they occur)`}>
+        {active.length === 0 ? (
+          <span style={{ ...styles.flag, color: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}>
+            BUS OK
+          </span>
+        ) : active.map((f) => (
+          <span key={f.bit} style={{ ...styles.flag, color: f.color, borderColor: f.color }} title={f.title}>
+            {f.label}
+          </span>
+        ))}
+      </div>
+      <Divider />
+    </>
+  );
+}
+
+// Three lines, closer together when compact
+function DensityIcon({ compact }: { compact: boolean }) {
+  const ys = compact ? [8, 12, 16] : [6, 12, 18];
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      {ys.map((y) => <line key={y} x1="4" y1={y} x2="20" y2={y} />)}
+    </svg>
+  );
+}
+
 export function TopBar() {
   const status    = useConnectionStore((s) => s.status);
   const config    = useConnectionStore((s) => s.config);
   const stats     = useStatsStore((s) => s.stats);
   const { theme, toggle } = useThemeStore();
+  const density       = useDensityStore((s) => s.density);
+  const toggleDensity = useDensityStore((s) => s.toggle);
   const sidebarOpen   = useLayoutStore((s) => s.sidebarOpen);
   const toggleSidebar = useLayoutStore((s) => s.toggleSidebar);
 
@@ -143,6 +193,9 @@ export function TopBar() {
             </div>
             <Divider />
 
+            {/* slcan adapter status ('F' flags) */}
+            {isSlcan && stats.slcan_status && <SlcanFlags status={stats.slcan_status} />}
+
             {/* Bus-off events */}
             {stats.bus_off_events > 0 && (
               <>
@@ -165,6 +218,17 @@ export function TopBar() {
         </div>
 
         <Divider />
+
+        {/* Density toggle */}
+        <button
+          className="theme-toggle"
+          onClick={toggleDensity}
+          title={density === 'compact' ? 'Comfortable density (taller rows)' : 'Compact density (more rows on screen)'}
+          aria-label="Toggle density"
+          aria-pressed={density === 'compact'}
+        >
+          <DensityIcon compact={density === 'compact'} />
+        </button>
 
         {/* Theme toggle */}
         <button
@@ -258,6 +322,16 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--accent-green)',
     minWidth: 36,
     textAlign: 'right',
+  },
+  flag: {
+    fontSize: 'var(--fs-xs)',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    fontFamily: 'var(--font-mono)',
+    border: '1px solid',
+    borderRadius: 3,
+    padding: '1px 4px',
+    marginLeft: 4,
   },
   statUnit: {
     fontSize: 10,

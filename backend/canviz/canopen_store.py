@@ -263,6 +263,7 @@ def _builtin_lookup(index: int, subindex: int) -> Optional[dict]:
 # ── SDO pairing window ────────────────────────────────────────────────────────
 
 _SDO_PAIR_TIMEOUT_S = 0.5   # max seconds between SDO req and response to pair them
+_QUIET_SDO_S        = 2.0   # quiet_sdo() keeps an object out of the SDO log this long
 
 # ── NMT state machine ─────────────────────────────────────────────────────────
 
@@ -514,6 +515,7 @@ class SdoPending:
     cmd: int
     description: str
     timestamp: float = field(default_factory=time.monotonic)
+    quiet: bool = False     # periodic read (plot) -- not added to the SDO log
 
 
 @dataclass
@@ -807,6 +809,26 @@ class EdsStore:
             except Exception:
                 return None
 
+    def decode_value(self, index: int, subindex: int, data: bytes) -> Optional[float]:
+        """
+        Numeric value of an SDO payload decoded with the object's EDS data
+        type (signed, float), or None when the object is unknown or not numeric.
+        """
+        if not data:
+            return None
+        with self._lock:
+            od = self._get_first_od()
+            if od is None:
+                return None
+            try:
+                var = od.get_variable(index, subindex)
+                value = var.decode_raw(data) if var is not None else None
+            except Exception:
+                return None
+        if isinstance(value, bool):
+            return int(value)
+        return value if isinstance(value, (int, float)) else None
+
     def list_objects(self, query: str = "", limit: int = 200) -> list[dict]:
         """
         Every object of the loaded EDS as a flat list (records and arrays are
@@ -870,6 +892,8 @@ class CANopenStore:
         self._nodes: dict[int, NodeRecord] = {}
         self._sdo_pending: dict[int, SdoPending] = {}   # keyed by node_id
         self._recent_sdo: list[dict]  = []   # last 50 completed SDO transactions
+        # (node_id, index, subindex) -> monotonic time until which it stays out of the log
+        self._quiet_sdo: dict[tuple[int, int, int], float] = {}
         self._recent_emcy: list[dict] = []   # last 20 EMCY events
         self._nmt_log: list[dict]     = []   # last 20 NMT commands seen
         self._sync_count: int         = 0
@@ -890,6 +914,15 @@ class CANopenStore:
             raise ValueError(f"Invalid mode: {mode!r}")
         with self._lock:
             self._mode = mode
+
+    def quiet_sdo(self, node_id: int, index: int, subindex: int) -> None:
+        """
+        Keep transfers of this object out of the SDO log for the next
+        _QUIET_SDO_S seconds -- used for periodic reads (plotting), which
+        would otherwise push everything else out of the log.
+        """
+        with self._lock:
+            self._quiet_sdo[(node_id, index, subindex)] = time.monotonic() + _QUIET_SDO_S
 
     def reset(self) -> None:
         with self._lock:
@@ -1104,9 +1137,13 @@ class CANopenStore:
         desc     = _sdo_description(cmd, is_request=True)
 
         with self._lock:
+            key   = (node_id, index, subindex)
+            quiet = now <= self._quiet_sdo.get(key, 0.0)
+            if not quiet:
+                self._quiet_sdo.pop(key, None)
             self._sdo_pending[node_id] = SdoPending(
                 node_id=node_id, index=index, subindex=subindex,
-                cmd=cmd, description=desc, timestamp=now,
+                cmd=cmd, description=desc, timestamp=now, quiet=quiet,
             )
 
         return {
@@ -1143,6 +1180,7 @@ class CANopenStore:
             pending = self._sdo_pending.pop(node_id, None)
             # Only pair if within timeout window and same index/subindex
             if (pending is not None
+                    and not pending.quiet
                     and now - pending.timestamp <= _SDO_PAIR_TIMEOUT_S
                     and pending.index == index
                     and pending.subindex == subindex):
@@ -1171,6 +1209,12 @@ class CANopenStore:
                 if obj_info:
                     transaction["object_name"] = obj_info["name"]
                     transaction["unit"]        = obj_info.get("unit", "")
+
+                # Typed value (signed / float) from the EDS data type
+                if resp_desc.startswith("Upload Response (expedited") and eds_store.loaded:
+                    value = eds_store.decode_value(index, subindex, payload)
+                    if value is not None:
+                        transaction["value"] = value
 
                 self._recent_sdo = [transaction] + self._recent_sdo
                 self._recent_sdo = self._recent_sdo[:50]

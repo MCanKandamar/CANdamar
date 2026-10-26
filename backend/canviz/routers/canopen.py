@@ -37,6 +37,7 @@ class SdoReadRequest(BaseModel):
     node_id: int      # 1-127
     index: int        # object dictionary index (e.g. 0x1008)
     subindex: int = 0
+    quiet: bool = False   # periodic read (plot): keep it out of the SDO log
 
 
 class NmtRequest(BaseModel):
@@ -106,19 +107,21 @@ async def list_eds_objects(q: str = ""):
 
 # ── SDO read (expedited or segmented upload) ──────────────────────────────────
 
-async def _read_object(node_id: int, index: int, subindex: int) -> dict:
+async def _read_object(node_id: int, index: int, subindex: int, quiet: bool = False) -> dict:
     """
     Run one SDO upload and describe the outcome. Segmented results (and
     segmented aborts) are also written into the SDO log, which on its own
-    only sees the initiate response.
+    only sees the initiate response. Quiet reads stay out of the log.
     """
     from canviz.sdo_client import SdoAbortError, SdoTimeoutError, printable_text, sdo_upload
 
     where = f"node 0x{node_id:02X}, index 0x{index:04X}:{subindex}"
+    if quiet:
+        canopen_store.quiet_sdo(node_id, index, subindex)
     try:
         result = await sdo_upload(node_id, index, subindex)
     except SdoAbortError as exc:
-        if exc.segmented or not exc.by_server:
+        if (exc.segmented or not exc.by_server) and not quiet:
             canopen_store.record_segmented_upload(node_id, index, subindex, abort_code=exc.code)
         return {
             "ok":         False,
@@ -126,12 +129,12 @@ async def _read_object(node_id: int, index: int, subindex: int) -> dict:
             "detail":     f"SDO abort 0x{exc.code:08X} from {where}",
         }
     except SdoTimeoutError as exc:
-        if exc.segmented:
+        if exc.segmented and not quiet:
             canopen_store.record_segmented_upload(node_id, index, subindex, abort_code=0x05040000)
         return {"ok": False, "timeout": True, "detail": str(exc)}
 
     data = result.data
-    if result.segmented:
+    if result.segmented and not quiet:
         canopen_store.record_segmented_upload(node_id, index, subindex, data=data)
     return {
         "ok":         True,
@@ -139,6 +142,8 @@ async def _read_object(node_id: int, index: int, subindex: int) -> dict:
         "size":       len(data),
         "data_hex":   data.hex(" ").upper(),
         "value_int":  int.from_bytes(data, "little") if 0 < len(data) <= 8 else None,
+        # Signed / float value from the EDS data type (None without EDS)
+        "value":      eds_store.decode_value(index, subindex, data) if eds_store.loaded else None,
         "value_text": printable_text(data),
         "message":    f"Read {len(data)} byte(s) from {where}",
     }
@@ -154,8 +159,10 @@ async def sdo_read(req: SdoReadRequest):
     with a segmented upload. The transaction also appears in
     GET /canopen/status under recent_sdo.
 
-    Response: {ok, data_hex, value_int, value_text, segmented, size}, or
-    {ok: false, abort_code, detail} when the node aborts the transfer.
+    Response: {ok, data_hex, value_int, value, value_text, segmented, size},
+    or {ok: false, abort_code, detail} when the node aborts the transfer.
+    "value" is decoded with the EDS data type when an EDS is loaded. With
+    "quiet": true the transfer is kept out of the SDO log (periodic reads).
     Requires an active CAN connection.
     """
     from canviz.bus import bus_manager
@@ -167,7 +174,7 @@ async def sdo_read(req: SdoReadRequest):
         raise HTTPException(status_code=400, detail="node_id must be 1-127")
 
     try:
-        result = await _read_object(req.node_id, req.index, req.subindex)
+        result = await _read_object(req.node_id, req.index, req.subindex, req.quiet)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Send error: {exc}")
 

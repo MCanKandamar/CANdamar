@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { CUSTOM_MESSAGE_NAME } from './customSignalStore';
 
 export const SIGNAL_COLORS = [
   '#22c55e',  // green
@@ -13,6 +14,25 @@ export const SIGNAL_COLORS = [
 
 export const MAX_SIGNALS    = 8;
 export const DISPLAY_POINTS = 2_000;
+
+// ─── Signal sources ──────────────────────────────────────────────────────────
+// A plot key is "<message>.<signal>". The message part tells where the value
+// came from: a DBC message name, "CANopen 0x0D" (EDS-decoded PDO),
+// "SDO 0x0D" (SDO upload) or "Custom" (DBC-less raw bytes).
+
+export type SignalSource = 'dbc' | 'pdo' | 'sdo' | 'custom';
+
+const nodeHex = (nodeId: number) => `0x${nodeId.toString(16).toUpperCase().padStart(2, '0')}`;
+
+export const pdoMessageName = (nodeId: number) => `CANopen ${nodeHex(nodeId)}`;
+export const sdoMessageName = (nodeId: number) => `SDO ${nodeHex(nodeId)}`;
+
+export function signalSource(key: string): SignalSource {
+  if (key.startsWith(`${CUSTOM_MESSAGE_NAME}.`)) return 'custom';
+  if (/^CANopen 0x[0-9A-F]{2}\./.test(key)) return 'pdo';
+  if (/^SDO 0x[0-9A-F]{2}\./.test(key)) return 'sdo';
+  return 'dbc';
+}
 
 // ─── Ring buffers - module scope, never in Zustand ───────────────────────────
 
@@ -53,10 +73,11 @@ export function readBuffer(buf: RingBuffer): [Float64Array, Float32Array] {
 // ─── Public write API (called from frameStore) ────────────────────────────────
 
 export function addSignalValues(
-  signals: Array<{ name: string; message_name: string; value: unknown }>,
+  signals: Array<{ name: string; message_name: string; value: unknown; unit?: string }>,
   timestampSec: number,
 ): void {
   const newKeys: string[] = [];
+  const newUnits: Record<string, string> = {};
   for (const sig of signals) {
     const v = Number(sig.value);
     if (!Number.isFinite(v)) continue;
@@ -64,12 +85,14 @@ export function addSignalValues(
     if (!ringBuffers.has(key)) {
       ringBuffers.set(key, createRingBuffer());
       newKeys.push(key);
+      if (sig.unit) newUnits[key] = sig.unit;
     }
     writePoint(ringBuffers.get(key)!, timestampSec, v);
   }
   if (newKeys.length > 0) {
     usePlotStore.setState((s) => ({
       availableSignals: [...s.availableSignals, ...newKeys],
+      signalUnits:      { ...s.signalUnits, ...newUnits },
     }));
   }
 }
@@ -91,11 +114,58 @@ export function getLatestTimestamp(keys: string[]): number {
   return latest;
 }
 
+/** Latest value of `key` as displayed, i.e. with the signal's scale applied. */
 export function getLatestValue(key: string): number | null {
   const buf = ringBuffers.get(key);
   if (!buf || buf.count === 0) return null;
   const lastIdx = (buf.head - 1 + MAX_POINTS) % MAX_POINTS;
-  return buf.vs[lastIdx];
+  return buf.vs[lastIdx] * getSignalScale(key);
+}
+
+// ─── Display scale / unit per signal ──────────────────────────────────────────
+// The ring buffers keep the values as received; the scale is applied when
+// drawing, so changing it also rescales the history.
+
+export interface SignalScale {
+  scale: number;
+  unit:  string;
+}
+
+const SCALES_KEY = 'canviz:signalScales';
+
+function loadScales(): Record<string, SignalScale> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SCALES_KEY) ?? '{}');
+    const out: Record<string, SignalScale> = {};
+    if (raw && typeof raw === 'object') {
+      for (const [key, v] of Object.entries(raw as Record<string, Partial<SignalScale>>)) {
+        if (v && Number.isFinite(v.scale) && v.scale !== 0 && typeof v.unit === 'string') {
+          out[key] = { scale: v.scale!, unit: v.unit };
+        }
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function getSignalScale(key: string): number {
+  return usePlotStore.getState().signalScales[key]?.scale ?? 1;
+}
+
+/** Unit to show: the user's override, else the unit reported by the source. */
+export function displayUnit(
+  key: string,
+  scales: Record<string, SignalScale>,
+  units: Record<string, string>,
+): string {
+  return scales[key]?.unit ?? units[key] ?? '';
+}
+
+/** Signals measured in millivolts (by unit or name), e.g. EDS object "Vdc mV". */
+export function isMillivolt(key: string, unit: string): boolean {
+  return unit === 'mV' || /mV$/.test(key.trim());
 }
 
 // ─── Zustand - UI state only ──────────────────────────────────────────────────
@@ -103,7 +173,12 @@ export function getLatestValue(key: string): number | null {
 interface PlotStore {
   selectedSignals:  string[];
   availableSignals: string[];
+  /** Unit reported by the source (DBC, EDS), by plot key */
+  signalUnits:      Record<string, string>;
+  /** Display scale and unit set by the user, by plot key (persisted) */
+  signalScales:     Record<string, SignalScale>;
   windowSec:        number;
+  setSignalScale:   (key: string, scale: SignalScale | null) => void;
   toggleSignal:     (key: string) => void;
   setWindowSec:     (s: number) => void;
   clearBuffers:     () => void;
@@ -114,7 +189,17 @@ interface PlotStore {
 export const usePlotStore = create<PlotStore>((set, get) => ({
   selectedSignals:  [],
   availableSignals: [],
+  signalUnits:      {},
+  signalScales:     loadScales(),
   windowSec:        60,
+
+  setSignalScale: (key, scale) => {
+    const signalScales = { ...get().signalScales };
+    if (scale) signalScales[key] = scale;
+    else delete signalScales[key];
+    set({ signalScales });
+    try { localStorage.setItem(SCALES_KEY, JSON.stringify(signalScales)); } catch { /* ignore */ }
+  },
 
   toggleSignal: (key) => {
     const { selectedSignals } = get();
@@ -129,7 +214,7 @@ export const usePlotStore = create<PlotStore>((set, get) => ({
 
   clearBuffers: () => {
     ringBuffers.clear();
-    set({ selectedSignals: [], availableSignals: [] });
+    set({ selectedSignals: [], availableSignals: [], signalUnits: {} });
   },
 
   forgetSignal: (key) => {

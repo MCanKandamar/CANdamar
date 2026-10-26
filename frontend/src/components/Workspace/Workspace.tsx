@@ -28,7 +28,7 @@ import { SendFramePanel } from '../SendFramePanel/SendFramePanel';
 import { LogControls } from '../LogControls/LogControls';
 import { ReplayPanel } from '../ReplayPanel/ReplayPanel';
 import {
-  useLayoutStore, PANES, tabLabel, paneOf, canMoveTo,
+  useLayoutStore, PANES, tabLabel, paneOf,
   type PaneId, type TabId,
 } from '../../store/layoutStore';
 import { useJ1939Store } from '../../store/j1939Store';
@@ -70,11 +70,9 @@ function draggedTab(e: React.DragEvent): TabId | null {
   return useLayoutStore.getState().draggingTab;
 }
 
-/** Whether dropping `tab` into `pane` changes anything that is allowed. */
+/** Whether `tab` may be dropped into `pane`: the last tab of the main pane stays there. */
 function dropAllowed(tab: TabId, pane: PaneId): boolean {
   const { panes } = useLayoutStore.getState();
-  if (!canMoveTo(tab, pane)) return false;
-  // The last tab of the main pane stays there
   return !(paneOf(panes, tab) === 'main' && pane !== 'main' && panes.main.length === 1);
 }
 

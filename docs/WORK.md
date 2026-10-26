@@ -22,8 +22,8 @@ B. Plot
 - [x] 5. Per-signal scale and unit, saved; suggest ×0.001 V for names/units ending in "mV" — verified: tsc + lint ✓, tried in browser (mV→V, scale persisted)
 - [x] 6. "Plot" button in the EDS object list: SDO read every 100 ms (decode with the EDS type), plotted; these periodic reads stay out of the SDO log — verified: pytest (29) + ruff ✓, tsc + lint ✓, tried in browser against a simulated node 13 with bldc_drive.eds (signed value, not logged); needs HW test
 C. Tabs
-- [ ] 7. Each pane (main, right, bottom) has its own tabs; dragging a tab to the edge of the content area opens a pane (drop shadow), an empty pane closes
-- [ ] 8. Send Frame / Record / Replay join the same tab system and can move between panes (no floating windows)
+- [x] 7. Each pane (main, right, bottom) has its own tabs; dragging a tab to the edge of the content area opens a pane (drop shadow), an empty pane closes — verified: tsc + lint + build ✓, tried in browser (edge drops, shadow, empty pane closes, no remount on move, 0.4.0 layout migrated)
+- [x] 8. Send Frame / Record / Replay join the same tab system and can move between panes (no floating windows) — verified: tsc + lint + build ✓, tried in browser (Send Frame to the right pane, bottom closes when empty and reopens from the bottom edge)
 D. slcan status
 - [ ] 9. slcan: poll `F` once a second, show error warning / passive, bus-off, overrun in the top bar (python-can's slcan driver ignores `Fxx` lines; small subclass; other interfaces unchanged)
 E. Monitoring and polish

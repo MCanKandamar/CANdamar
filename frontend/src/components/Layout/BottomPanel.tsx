@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useLayoutStore, canMoveTo } from '../../store/layoutStore';
+import { useLayoutStore } from '../../store/layoutStore';
 import { TabStrip, PaneBody, CloseIcon } from '../Workspace/Workspace';
 
 // The bottom pane of the tab layout: its tabs (Send Frame, Record, Replay by
@@ -62,7 +62,6 @@ export function BottomPanel() {
   const mode          = useLayoutStore((s) => s.bottomMode);
   const setBottomMode = useLayoutStore((s) => s.setBottomMode);
   const closePane     = useLayoutStore((s) => s.closePane);
-  const closable      = useLayoutStore((s) => s.panes.bottom.every((t) => canMoveTo(t, 'main')));
   const dragStartY = useRef(0);
   const dragStartH = useRef(0);
 
@@ -158,12 +157,10 @@ export function BottomPanel() {
           >
             <ChevronIcon up={mode === 'collapsed'} />
           </button>
-          {closable && (
-            <button className="ws-strip-btn" onClick={() => closePane('bottom')}
-              title="Close this pane -- its tabs go back to the main pane" aria-label="Close this pane">
-              <CloseIcon />
-            </button>
-          )}
+          <button className="ws-strip-btn" onClick={() => closePane('bottom')}
+            title="Close this pane -- its tabs go back to the main pane" aria-label="Close this pane">
+            <CloseIcon />
+          </button>
         </TabStrip>
       </div>
 

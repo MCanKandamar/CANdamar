@@ -3,8 +3,9 @@
  * --------------
  * UI layout state for the app shell: sidebar visibility, bottom pane mode
  * and the Chrome-style tabs. There are three panes -- main, right and
- * bottom -- and each has its own ordered tab list and active tab. A tab
- * lives in exactly one pane; the right and bottom panes exist only while
+ * bottom -- and each has its own ordered tab list and active tab. Every tab,
+ * the tools (Send Frame, Record, Replay) included, lives in exactly one pane
+ * and can move to any other; the right and bottom panes exist only while
  * they hold tabs. The main pane is never emptied.
  * Persists to localStorage so the layout survives a reload.
  *
@@ -33,8 +34,8 @@ export const PANES: PaneId[] = ['main', 'right', 'bottom'];
 
 const TAB_IDS = TABS.map((t) => t.id);
 
-/** Tools that stay in the bottom pane */
-export const BOTTOM_ONLY_TABS: TabId[] = ['send', 'record', 'replay'];
+/** Tools that start in the bottom pane */
+const TOOL_TABS: TabId[] = ['send', 'record', 'replay'];
 
 export const tabLabel = (tab: TabId) => TABS.find((t) => t.id === tab)?.label ?? tab;
 
@@ -75,19 +76,17 @@ function normalise(panes: Record<PaneId, TabId[]>, active: Partial<Record<PaneId
   for (const pane of PANES) {
     for (const tab of panes[pane] ?? []) {
       if (!isTab(tab) || seen.has(tab)) continue;
-      // Bottom-only tools found elsewhere go back to the bottom pane
-      out[BOTTOM_ONLY_TABS.includes(tab) ? 'bottom' : pane].push(tab);
+      out[pane].push(tab);
       seen.add(tab);
     }
   }
   for (const tab of TAB_IDS) {
-    if (!seen.has(tab)) out[BOTTOM_ONLY_TABS.includes(tab) ? 'bottom' : 'main'].push(tab);
+    if (!seen.has(tab)) out[TOOL_TABS.includes(tab) ? 'bottom' : 'main'].push(tab);
   }
   if (out.main.length === 0) {
-    const movable = (t: TabId) => !BOTTOM_ONLY_TABS.includes(t);
-    out.main  = [...out.right, ...out.bottom.filter(movable)];
+    out.main  = [...out.right, ...out.bottom];
     out.right = [];
-    out.bottom = out.bottom.filter((t) => !movable(t));
+    out.bottom = [];
   }
   const act = {} as Record<PaneId, TabId | null>;
   for (const pane of PANES) {
@@ -148,11 +147,6 @@ export function paneOf(panes: Record<PaneId, TabId[]>, tab: TabId): PaneId {
   return PANES.find((p) => panes[p].includes(tab)) ?? 'main';
 }
 
-/** Whether `tab` may be dropped into `pane` */
-export function canMoveTo(tab: TabId, pane: PaneId): boolean {
-  return pane === 'bottom' || !BOTTOM_ONLY_TABS.includes(tab);
-}
-
 interface LayoutStore extends PersistedLayout {
   /** Tab being dragged (not persisted) -- shows the drop zones */
   draggingTab: TabId | null;
@@ -188,7 +182,7 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
   },
 
   moveTab: (tab, pane, before) => {
-    if (tab === before || !canMoveTo(tab, pane)) return;
+    if (tab === before) return;
     const { panes, active } = get();
     const from = paneOf(panes, tab);
     if (from === 'main' && pane !== 'main' && panes.main.length === 1) return;
@@ -219,10 +213,9 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
   closePane: (pane) => {
     if (pane === 'main') return;
     const { panes, active } = get();
-    const stay = panes[pane].filter((t) => !canMoveTo(t, 'main'));
     set({
-      panes:       { ...panes, main: [...panes.main, ...panes[pane].filter((t) => canMoveTo(t, 'main'))], [pane]: stay },
-      active:      { ...active, [pane]: stay.includes(active[pane]!) ? active[pane] : stay[0] ?? null },
+      panes:       { ...panes, main: [...panes.main, ...panes[pane]], [pane]: [] },
+      active:      { ...active, [pane]: null },
       focusedPane: 'main',
     });
   },

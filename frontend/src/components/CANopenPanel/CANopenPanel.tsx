@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCANopenStore } from '../../store/canopenStore';
 import { useSdoPollStore, polledKey, SDO_POLL_INTERVAL_MS } from '../../store/sdoPollStore';
+import { DriveSetpoints, StatuswordView } from './DriveStatus';
 import type { CANopenNode, SdoTransaction, EmcyRecord } from '../../store/canopenStore';
 import {
   bytesToHex, encodeSdoValue, formatAbortCode, isSdoWriteResponse,
@@ -314,6 +315,10 @@ function DriveControlPanel({ nodes }: { nodes: CANopenNode[] }) {
           {result}
         </div>
       )}
+
+      {/* Mode of operation, target velocity, statusword bits */}
+      <DriveSetpoints nodeId={targetId} />
+      <StatuswordView nodeId={targetId} />
     </div>
   );
 }

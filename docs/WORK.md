@@ -33,7 +33,7 @@ E. Monitoring and polish
 - [x] 13. Save / load Send Frame lists + CANopen templates — verified: tsc + lint + build ✓, tried in browser against the simulated node 13 (templates answered, file load / bad file)
 - [x] 14. Visual clean-up (shared CSS classes, consistent font sizes, density setting) — verified: tsc + lint + build ✓, tried in browser (built app; Vite dev served a stale index.css). Scope kept small: font-size tokens, no 8/9 px text, .section-label / .hint-text, density toggle in the top bar
 F. Drive
-- [ ] 15. Drive Control: mode of operation 0x6060, target velocity 0x60FF, statusword bits shown one by one (drive CANopen phases 4–5)
+- [x] 15. Drive Control: mode of operation 0x6060, target velocity 0x60FF, statusword bits shown one by one (drive CANopen phases 4–5) — verified: tsc + lint + build ✓, tried in browser against the simulated node 13; needs HW test once the drive has 0x6041/0x6060/0x60FF (phases 4-5)
 - [ ] 16. Docs + CHANGELOG, v0.5.0 (ask before bump / tag)
 
 ## Next

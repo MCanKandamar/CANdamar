@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { useLayoutStore } from '../../store/layoutStore';
 import { TabStrip, PaneBody, CloseIcon } from '../Workspace/Workspace';
 
@@ -79,7 +79,8 @@ export function BottomPanel() {
     mode === 'maximized' ? maxHeight :
     normalHeight;
 
-  useEffect(() => {
+  // Layout effect: the grid row gets its height before the first paint
+  useLayoutEffect(() => {
     document.documentElement.style.setProperty('--bottompanel-height', `${effectiveHeight}px`);
   }, [effectiveHeight]);
 

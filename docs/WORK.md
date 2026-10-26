@@ -18,9 +18,9 @@ A. Frames table
 - [x] 2. Last data column fills the remaining width; Protocol Info shows in full when it fits, badges inside that column — verified: tsc + lint ✓, tried in browser (virtual bus)
 - [x] 3. Baudrate shown as `115200` (plain digits) — verified: tsc + lint ✓, tried in browser (virtual bus)
 B. Plot
-- [ ] 4. Signal list left of the plot, grouped by source (DBC / CANopen PDO / SDO / Custom), filled automatically; short help when empty
-- [ ] 5. Per-signal scale and unit, saved; suggest ×0.001 V for names/units ending in "mV"
-- [ ] 6. "Plot" button in the EDS object list: SDO read every 100 ms (decode with the EDS type), plotted; these periodic reads stay out of the SDO log
+- [x] 4. Signal list left of the plot, grouped by source (DBC / CANopen PDO / SDO / Custom), filled automatically; short help when empty — verified: tsc + lint ✓, tried in browser (virtual bus)
+- [x] 5. Per-signal scale and unit, saved; suggest ×0.001 V for names/units ending in "mV" — verified: tsc + lint ✓, tried in browser (mV→V, scale persisted)
+- [x] 6. "Plot" button in the EDS object list: SDO read every 100 ms (decode with the EDS type), plotted; these periodic reads stay out of the SDO log — verified: pytest (29) + ruff ✓, tsc + lint ✓, tried in browser against a simulated node 13 with bldc_drive.eds (signed value, not logged); needs HW test
 C. Tabs
 - [ ] 7. Each pane (main, right, bottom) has its own tabs; dragging a tab to the edge of the content area opens a pane (drop shadow), an empty pane closes
 - [ ] 8. Send Frame / Record / Replay join the same tab system and can move between panes (no floating windows)

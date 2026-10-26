@@ -67,6 +67,7 @@ export interface CANopenInfo {
     response_cmd: string;
     data_hex: string;
     value_int?: number | null;
+    value?: number | null;      // decoded with the EDS data type (signed, float)
     value_text?: string | null;
     is_abort?: boolean;
     object_name?: string;

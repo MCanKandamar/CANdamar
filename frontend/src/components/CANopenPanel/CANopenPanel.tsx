@@ -18,6 +18,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useCANopenStore } from '../../store/canopenStore';
+import { useSdoPollStore, polledKey, SDO_POLL_INTERVAL_MS } from '../../store/sdoPollStore';
 import type { CANopenNode, SdoTransaction, EmcyRecord } from '../../store/canopenStore';
 import {
   bytesToHex, encodeSdoValue, formatAbortCode, isSdoWriteResponse,
@@ -935,11 +936,16 @@ type OdSource = 'builtin' | 'eds';
 interface OdBrowserProps {
   onRead:  (idx: string, sub: number) => void;
   onWrite: (idx: string, sub: number, type: SdoValueType) => void;
+  /** Node whose objects "Plot" reads (the first discovered node) */
+  plotNodeId?: number;
 }
 
-function ObjectDictionaryBrowser({ onRead, onWrite }: OdBrowserProps) {
+function ObjectDictionaryBrowser({ onRead, onWrite, plotNodeId }: OdBrowserProps) {
   const edsLoaded   = useCANopenStore((x) => x.edsLoaded);
   const edsFilename = useCANopenStore((x) => x.edsFilename);
+  const polled      = useSdoPollStore((x) => x.objects);
+  const startPoll   = useSdoPollStore((x) => x.start);
+  const stopPoll    = useSdoPollStore((x) => x.stop);
 
   const [open,    setOpen]    = useState(false);
   const [source,  setSource]  = useState<OdSource>(edsLoaded ? 'eds' : 'builtin');
@@ -1018,6 +1024,13 @@ function ObjectDictionaryBrowser({ onRead, onWrite }: OdBrowserProps) {
                   {results.map((r, i) => {
                     const writeType = r.data_type ? sdoValueTypeFor(r.data_type) : undefined;
                     const writable  = !!r.access?.includes('w');
+                    // Numeric, readable objects can be read periodically into the plot
+                    const plottable = isEds && !!writeType && r.access !== 'wo';
+                    const pollObj   = plotNodeId === undefined ? undefined : {
+                      nodeId: plotNodeId, index: parseInt(r.index, 16), subindex: r.subindex, name: r.name,
+                    };
+                    const pollKey   = pollObj && polledKey(pollObj);
+                    const isPolled  = !!pollKey && polled.some((o) => polledKey(o) === pollKey);
                     return (
                       <tr key={i}>
                         <td style={{ ...s.td, ...s.mono, color: 'var(--accent-blue)', whiteSpace: 'nowrap' as const }}>
@@ -1056,6 +1069,19 @@ function ObjectDictionaryBrowser({ onRead, onWrite }: OdBrowserProps) {
                               title={writeType ? 'Fill SDO Write with this object and type' : 'Only numeric types can be written here'}
                               onClick={() => writeType && onWrite(r.index, r.subindex, writeType)}>
                               Write
+                            </button>
+                          )}
+                          {plottable && (
+                            <button className={`btn btn-sm ${isPolled ? 'btn-primary' : 'btn-ghost'}`}
+                              style={{ fontSize: 10, padding: '1px 6px', marginLeft: 4 }}
+                              disabled={!pollObj}
+                              title={!pollObj
+                                ? 'No CANopen node found on the bus'
+                                : isPolled
+                                  ? 'Stop reading this object'
+                                  : `Read every ${SDO_POLL_INTERVAL_MS} ms from node ${plotNodeId} and show it in the Plot tab (not logged)`}
+                              onClick={() => pollObj && (isPolled ? stopPoll(pollKey!) : startPoll(pollObj))}>
+                              {isPolled ? 'Plotting' : 'Plot'}
                             </button>
                           )}
                         </td>
@@ -1300,6 +1326,7 @@ export function CANopenPanel() {
           <ObjectDictionaryBrowser
             onRead={(index, sub) => setReadPrefill({ index, sub, seq: ++prefillSeq.current })}
             onWrite={(index, sub, type) => setWritePrefill({ index, sub, type, seq: ++prefillSeq.current })}
+            plotNodeId={nodes[0]?.node_id}
           />
 
           {/* 9. READ ALL NODE OBJECTS */}

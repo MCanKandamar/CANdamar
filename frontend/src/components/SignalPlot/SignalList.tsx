@@ -13,6 +13,7 @@ import {
   isMillivolt, type SignalSource,
 } from '../../store/plotStore';
 import { useCustomSignalStore, customSignalKey } from '../../store/customSignalStore';
+import { useSdoPollStore, polledKey } from '../../store/sdoPollStore';
 
 const GROUPS: { id: SignalSource; label: string; hint: string }[] = [
   { id: 'dbc',    label: 'DBC',          hint: 'Load a DBC file in the sidebar; signals appear when their frames arrive.' },
@@ -78,7 +79,11 @@ export function SignalList() {
   const signalScales     = usePlotStore((s) => s.signalScales);
   const toggleSignal     = usePlotStore((s) => s.toggleSignal);
   const setSignalScale   = usePlotStore((s) => s.setSignalScale);
+  const polled           = useSdoPollStore((s) => s.objects);
+  const pollError        = useSdoPollStore((s) => s.error);
+  const stopPoll         = useSdoPollStore((s) => s.stop);
   const [editing, setEditing] = useState<string | null>(null);
+  const polledKeys = new Set(polled.map(polledKey));
   const customSignals    = useCustomSignalStore((s) => s.signals);
 
   // Re-render twice a second so the latest values stay current
@@ -88,10 +93,9 @@ export function SignalList() {
     return () => clearInterval(t);
   }, []);
 
-  // Custom signals are listed as soon as they are defined, before any frame
+  // Custom signals and polled SDO objects are listed before the first value
   const keys = [...availableSignals];
-  for (const sig of customSignals) {
-    const key = customSignalKey(sig.name);
+  for (const key of [...customSignals.map((sig) => customSignalKey(sig.name)), ...polledKeys]) {
     if (!keys.includes(key)) keys.push(key);
   }
 
@@ -108,6 +112,9 @@ export function SignalList() {
               {groupKeys.length > 0 && <span style={styles.count}>{groupKeys.length}</span>}
             </div>
             {groupKeys.length === 0 && <div style={styles.hint}>{g.hint}</div>}
+            {g.id === 'sdo' && polled.length > 0 && pollError && (
+              <div style={styles.error} title={pollError}>Read failed: {pollError}</div>
+            )}
             {groupKeys.map((key) => {
               const si       = selectedSignals.indexOf(key);
               const selected = si !== -1;
@@ -138,6 +145,12 @@ export function SignalList() {
                       {formatValue(getLatestValue(key))}
                       {unit && <span style={styles.unit}> {unit}</span>}
                     </span>
+                    {polledKeys.has(key) && (
+                      <button style={styles.stop} title="Read by SDO every 100 ms -- click to stop"
+                        onClick={() => stopPoll(key)}>
+                        ■
+                      </button>
+                    )}
                     {suggestV && (
                       <button style={styles.suggest} title="Show in volts (× 0.001)"
                         onClick={() => setSignalScale(key, MILLIVOLT_TO_VOLT)}>
@@ -241,6 +254,24 @@ const styles: Record<string, React.CSSProperties> = {
   },
   unit: {
     color: 'var(--text-muted)',
+  },
+  error: {
+    fontSize: 10,
+    color: 'var(--accent-red)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    marginBottom: 2,
+  },
+  stop: {
+    flexShrink: 0,
+    background: 'none',
+    border: 'none',
+    color: 'var(--accent-amber)',
+    fontSize: 9,
+    lineHeight: 1,
+    padding: '0 2px',
+    cursor: 'pointer',
   },
   suggest: {
     flexShrink: 0,

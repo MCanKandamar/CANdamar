@@ -131,7 +131,7 @@ export const useFrameStore = create<FrameStore>((set, get) => ({
       addSignalValues([{
         name:         sdo.object_name || `${sdo.index}:${sdo.subindex}`,
         message_name: sdoMessageName(sdo.node_id),
-        value:        sdo.value_int,
+        value:        sdo.value ?? sdo.value_int,
       }], nowMs / 1000);
     }
 

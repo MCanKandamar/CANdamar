@@ -2,7 +2,7 @@ import type { ConnectionConfig, ApiStatus } from '../types/can';
 
 // In dev: Vite proxies /api/* → localhost:8080/* (stripping /api prefix)
 // In prod: FastAPI serves at same origin with no prefix — use empty base
-const BASE = import.meta.env.DEV ? '/api' : '';
+export const BASE = import.meta.env.DEV ? '/api' : '';
 
 async function request<T>(
   path: string,

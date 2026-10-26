@@ -6,6 +6,7 @@ SDO reads against a simulated CANopen node on the virtual bus.
 The fake node (node 13) runs in a thread on its own virtual bus instance
 and answers SDO uploads:
   0x2000:0  expedited, UNSIGNED16 24055 (F7 5D)
+  0x2001:0  expedited, INTEGER16 -1000 (18 FC)
   0x1008:0  segmented, VISIBLE_STRING "BLDC drive demo" (15 bytes -> 3 segments)
   0x3000:0  never answers (timeout)
   anything else -> abort 0x06020000 (object does not exist)
@@ -21,7 +22,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from canviz.bus import bus_manager
-from canviz.canopen_store import canopen_store
+from canviz.canopen_store import canopen_store, eds_store
 from canviz.server import app
 from canviz.ws_broadcaster import broadcaster
 
@@ -54,6 +55,8 @@ class FakeSdoServer(threading.Thread):
                 mux = list(d[1:4])
                 if (index, sub) == (0x2000, 0):
                     self._reply([0x4B, *mux, 0xF7, 0x5D, 0, 0])
+                elif (index, sub) == (0x2001, 0):
+                    self._reply([0x4B, *mux, 0x18, 0xFC, 0, 0])
                 elif (index, sub) == (0x1008, 0):
                     self._upload, self._pos = DEVICE_NAME, 0
                     self._reply([0x41, *mux, len(DEVICE_NAME), 0, 0, 0])
@@ -84,6 +87,7 @@ async def clean_state():
     await broadcaster.stop()
     canopen_store.set_mode("off")
     canopen_store.reset()
+    eds_store.clear()
 
 
 @pytest_asyncio.fixture
@@ -150,3 +154,63 @@ async def test_timeout(client, node):
     await _connect(client)
     r = await client.post("/canopen/sdo/read", json={"node_id": NODE_ID, "index": 0x3000})
     assert r.status_code == 504
+
+
+async def test_quiet_read_stays_out_of_sdo_log(client, node):
+    await _connect(client)
+    r = await client.post(
+        "/canopen/sdo/read", json={"node_id": NODE_ID, "index": 0x2000, "quiet": True},
+    )
+    assert r.status_code == 200 and r.json()["value_int"] == 24055
+
+    status = (await client.get("/canopen/status")).json()
+    assert not [t for t in status["recent_sdo"] if t["index"] == "0x2000"]
+
+    # A normal read of another object is still logged
+    await client.post("/canopen/sdo/read", json={"node_id": NODE_ID, "index": 0x2001})
+    status = (await client.get("/canopen/status")).json()
+    assert [t for t in status["recent_sdo"] if t["index"] == "0x2001"]
+
+
+DRIVE_EDS = b"""\
+[FileInfo]
+FileName=drive.eds
+[DeviceInfo]
+VendorName=Test
+[MandatoryObjects]
+SupportedObjects=1
+1=0x1000
+[1000]
+ParameterName=Device type
+ObjectType=0x7
+DataType=0x0007
+AccessType=ro
+DefaultValue=0
+PDOMapping=0
+[ManufacturerObjects]
+SupportedObjects=1
+1=0x2001
+[2001]
+ParameterName=Speed rpm
+ObjectType=0x7
+DataType=0x0003
+AccessType=ro
+DefaultValue=0
+PDOMapping=1
+"""
+
+
+async def test_value_decoded_with_eds_type(client, node):
+    await _connect(client)
+    r = await client.post("/canopen/sdo/read", json={"node_id": NODE_ID, "index": 0x2001})
+    body = r.json()
+    assert body["value_int"] == 0xFC18 and body["value"] is None   # no EDS: unsigned only
+
+    assert eds_store.load(DRIVE_EDS, "drive.eds")["ok"]
+    r = await client.post("/canopen/sdo/read", json={"node_id": NODE_ID, "index": 0x2001})
+    assert r.json()["value"] == -1000                                  # INTEGER16
+
+    # The SDO log transaction carries the typed value too
+    status = (await client.get("/canopen/status")).json()
+    entry = next(t for t in status["recent_sdo"] if t["index"] == "0x2001")
+    assert entry["value"] == -1000

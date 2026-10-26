@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import uPlot from 'uplot';
 import { usePlot } from '../../hooks/usePlot';
 import { usePlotRenderLoop } from '../../hooks/usePlotRenderLoop';
-import { usePlotStore, SIGNAL_COLORS, getLatestValue } from '../../store/plotStore';
+import { usePlotStore, SIGNAL_COLORS, getLatestValue, displayUnit } from '../../store/plotStore';
 import { useThemeStore } from '../../store/themeStore';
 import { CustomSignalForm } from './CustomSignalForm';
 import { SignalList } from './SignalList';
@@ -36,6 +36,8 @@ export function SignalPlot() {
   const toggleSignal     = usePlotStore((s) => s.toggleSignal);
   const windowSec        = usePlotStore((s) => s.windowSec);
   const setWindowSec     = usePlotStore((s) => s.setWindowSec);
+  const signalUnits      = usePlotStore((s) => s.signalUnits);
+  const signalScales     = usePlotStore((s) => s.signalScales);
 
   // Subscribe to theme so opts rebuild on switch
   const theme = useThemeStore((s) => s.theme);
@@ -110,7 +112,8 @@ export function SignalPlot() {
       series: [
         {},
         ...selectedSignals.map((key, i) => ({
-          label:    key,
+          label:    displayUnit(key, signalScales, signalUnits)
+            ? `${key} [${displayUnit(key, signalScales, signalUnits)}]` : key,
           stroke:   SIGNAL_COLORS[i % SIGNAL_COLORS.length],
           width:    2,
           fill:     SIGNAL_COLORS[i % SIGNAL_COLORS.length] + '10',
@@ -169,9 +172,9 @@ export function SignalPlot() {
   // theme is the key dep — forces opts rebuild when switching modes
   // thresholdsRef and breachedRef are stable refs, intentionally excluded
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSignals, theme]);
+  }, [selectedSignals, theme, signalScales, signalUnits]);
 
-  const { containerRef, plotRef } = usePlot(opts, emptyData, [selectedSignals.join(','), theme]);
+  const { containerRef, plotRef } = usePlot(opts, emptyData, [selectedSignals.join(','), theme, signalScales]);
   usePlotRenderLoop(plotRef, selectedSignals, windowSec, isPausedRef, onPausedChange);
 
   // ── Drag / zoom handlers ────────────────────────────────────────────────

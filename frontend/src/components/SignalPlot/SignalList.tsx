@@ -3,13 +3,14 @@
  * --------------
  * Left-hand list of the Plot tab: every signal that has received values,
  * grouped by where it comes from (DBC, CANopen PDO, SDO, Custom). Ticking a
- * signal plots it. Empty groups explain how to fill them.
+ * signal plots it. Empty groups explain how to fill them. The gear opens a
+ * display scale / unit editor; millivolt signals get a one-click "→V".
  */
 
 import { useEffect, useState } from 'react';
 import {
-  usePlotStore, SIGNAL_COLORS, MAX_SIGNALS, getLatestValue, signalSource,
-  type SignalSource,
+  usePlotStore, SIGNAL_COLORS, MAX_SIGNALS, getLatestValue, signalSource, displayUnit,
+  isMillivolt, type SignalSource,
 } from '../../store/plotStore';
 import { useCustomSignalStore, customSignalKey } from '../../store/customSignalStore';
 
@@ -38,11 +39,46 @@ function formatValue(v: number | null): string {
   return Math.abs(v) >= 1000 ? v.toFixed(1) : v.toPrecision(4);
 }
 
+const MILLIVOLT_TO_VOLT = { scale: 0.001, unit: 'V' };
+
+function ScaleEditor({ signalKey, onClose }: { signalKey: string; onClose: () => void }) {
+  const current        = usePlotStore((s) => s.signalScales[signalKey]);
+  const sourceUnit     = usePlotStore((s) => s.signalUnits[signalKey] ?? '');
+  const setSignalScale = usePlotStore((s) => s.setSignalScale);
+  const [scale, setScale] = useState(String(current?.scale ?? 1));
+  const [unit,  setUnit]  = useState(current?.unit ?? sourceUnit);
+
+  const num   = parseFloat(scale);
+  const valid = Number.isFinite(num) && num !== 0;
+
+  return (
+    <div style={styles.editor}>
+      <span style={styles.editorLabel}>×</span>
+      <input style={{ ...styles.editorInput, width: 64 }} value={scale}
+        onChange={(e) => setScale(e.target.value)} title="Scale: displayed value = received value × scale" />
+      <input style={{ ...styles.editorInput, width: 44 }} value={unit}
+        onChange={(e) => setUnit(e.target.value)} placeholder="unit" title="Unit shown with the value" />
+      <button className="btn btn-primary btn-sm" style={styles.editorBtn} disabled={!valid}
+        onClick={() => { setSignalScale(signalKey, { scale: num, unit }); onClose(); }}>
+        OK
+      </button>
+      <button className="btn btn-ghost btn-sm" style={styles.editorBtn}
+        title="Back to the received value and unit"
+        onClick={() => { setSignalScale(signalKey, null); onClose(); }}>
+        Reset
+      </button>
+    </div>
+  );
+}
+
 export function SignalList() {
   const availableSignals = usePlotStore((s) => s.availableSignals);
   const selectedSignals  = usePlotStore((s) => s.selectedSignals);
   const signalUnits      = usePlotStore((s) => s.signalUnits);
+  const signalScales     = usePlotStore((s) => s.signalScales);
   const toggleSignal     = usePlotStore((s) => s.toggleSignal);
+  const setSignalScale   = usePlotStore((s) => s.setSignalScale);
+  const [editing, setEditing] = useState<string | null>(null);
   const customSignals    = useCustomSignalStore((s) => s.signals);
 
   // Re-render twice a second so the latest values stay current
@@ -76,29 +112,48 @@ export function SignalList() {
               const si       = selectedSignals.indexOf(key);
               const selected = si !== -1;
               const disabled = !selected && full;
+              const unit     = displayUnit(key, signalScales, signalUnits);
+              const suggestV = !signalScales[key] && isMillivolt(key, unit);
               return (
-                <label
-                  key={key}
-                  style={{ ...styles.row, opacity: disabled ? 0.5 : 1 }}
-                  title={disabled ? `At most ${MAX_SIGNALS} signals can be plotted` : key}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    disabled={disabled}
-                    onChange={() => toggleSignal(key)}
-                    style={styles.checkbox}
-                  />
-                  <span style={{
-                    ...styles.dot,
-                    background: selected ? SIGNAL_COLORS[si % SIGNAL_COLORS.length] : 'transparent',
-                  }} />
-                  <span style={styles.name}>{shortName(key, g.id)}</span>
-                  <span style={styles.value} className="mono">
-                    {formatValue(getLatestValue(key))}
-                    {signalUnits[key] && <span style={styles.unit}> {signalUnits[key]}</span>}
-                  </span>
-                </label>
+                <div key={key}>
+                  <div style={styles.row}>
+                    <label
+                      style={{ ...styles.rowLabel, opacity: disabled ? 0.5 : 1 }}
+                      title={disabled ? `At most ${MAX_SIGNALS} signals can be plotted` : key}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        disabled={disabled}
+                        onChange={() => toggleSignal(key)}
+                        style={styles.checkbox}
+                      />
+                      <span style={{
+                        ...styles.dot,
+                        background: selected ? SIGNAL_COLORS[si % SIGNAL_COLORS.length] : 'transparent',
+                      }} />
+                      <span style={styles.name}>{shortName(key, g.id)}</span>
+                    </label>
+                    <span style={styles.value} className="mono">
+                      {formatValue(getLatestValue(key))}
+                      {unit && <span style={styles.unit}> {unit}</span>}
+                    </span>
+                    {suggestV && (
+                      <button style={styles.suggest} title="Show in volts (× 0.001)"
+                        onClick={() => setSignalScale(key, MILLIVOLT_TO_VOLT)}>
+                        →V
+                      </button>
+                    )}
+                    <button
+                      style={{ ...styles.gear, color: signalScales[key] ? 'var(--accent-green)' : undefined }}
+                      title="Display scale and unit"
+                      onClick={() => setEditing(editing === key ? null : key)}
+                    >
+                      ⚙
+                    </button>
+                  </div>
+                  {editing === key && <ScaleEditor signalKey={key} onClose={() => setEditing(null)} />}
+                </div>
               );
             })}
           </div>
@@ -148,10 +203,17 @@ const styles: Record<string, React.CSSProperties> = {
   row: {
     display: 'flex',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     height: 22,
-    cursor: 'pointer',
     fontSize: 11,
+  },
+  rowLabel: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    cursor: 'pointer',
   },
   checkbox: {
     margin: 0,
@@ -179,5 +241,49 @@ const styles: Record<string, React.CSSProperties> = {
   },
   unit: {
     color: 'var(--text-muted)',
+  },
+  suggest: {
+    flexShrink: 0,
+    background: 'none',
+    border: '1px dashed var(--accent-amber)',
+    borderRadius: 3,
+    color: 'var(--accent-amber)',
+    fontSize: 9,
+    lineHeight: 1,
+    padding: '2px 3px',
+    cursor: 'pointer',
+  },
+  gear: {
+    flexShrink: 0,
+    background: 'none',
+    border: 'none',
+    color: 'var(--text-muted)',
+    fontSize: 11,
+    lineHeight: 1,
+    padding: '0 2px',
+    cursor: 'pointer',
+  },
+  editor: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '2px 0 6px 18px',
+  },
+  editorLabel: {
+    fontSize: 11,
+    color: 'var(--text-muted)',
+  },
+  editorInput: {
+    background: 'var(--bg-panel)',
+    border: '1px solid var(--border-default)',
+    borderRadius: 3,
+    color: 'var(--text-primary)',
+    fontSize: 11,
+    fontFamily: 'var(--font-mono)',
+    padding: '1px 4px',
+  },
+  editorBtn: {
+    fontSize: 10,
+    padding: '1px 6px',
   },
 };

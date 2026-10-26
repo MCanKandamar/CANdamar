@@ -114,11 +114,58 @@ export function getLatestTimestamp(keys: string[]): number {
   return latest;
 }
 
+/** Latest value of `key` as displayed, i.e. with the signal's scale applied. */
 export function getLatestValue(key: string): number | null {
   const buf = ringBuffers.get(key);
   if (!buf || buf.count === 0) return null;
   const lastIdx = (buf.head - 1 + MAX_POINTS) % MAX_POINTS;
-  return buf.vs[lastIdx];
+  return buf.vs[lastIdx] * getSignalScale(key);
+}
+
+// ─── Display scale / unit per signal ──────────────────────────────────────────
+// The ring buffers keep the values as received; the scale is applied when
+// drawing, so changing it also rescales the history.
+
+export interface SignalScale {
+  scale: number;
+  unit:  string;
+}
+
+const SCALES_KEY = 'canviz:signalScales';
+
+function loadScales(): Record<string, SignalScale> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SCALES_KEY) ?? '{}');
+    const out: Record<string, SignalScale> = {};
+    if (raw && typeof raw === 'object') {
+      for (const [key, v] of Object.entries(raw as Record<string, Partial<SignalScale>>)) {
+        if (v && Number.isFinite(v.scale) && v.scale !== 0 && typeof v.unit === 'string') {
+          out[key] = { scale: v.scale!, unit: v.unit };
+        }
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function getSignalScale(key: string): number {
+  return usePlotStore.getState().signalScales[key]?.scale ?? 1;
+}
+
+/** Unit to show: the user's override, else the unit reported by the source. */
+export function displayUnit(
+  key: string,
+  scales: Record<string, SignalScale>,
+  units: Record<string, string>,
+): string {
+  return scales[key]?.unit ?? units[key] ?? '';
+}
+
+/** Signals measured in millivolts (by unit or name), e.g. EDS object "Vdc mV". */
+export function isMillivolt(key: string, unit: string): boolean {
+  return unit === 'mV' || /mV$/.test(key.trim());
 }
 
 // ─── Zustand - UI state only ──────────────────────────────────────────────────
@@ -128,7 +175,10 @@ interface PlotStore {
   availableSignals: string[];
   /** Unit reported by the source (DBC, EDS), by plot key */
   signalUnits:      Record<string, string>;
+  /** Display scale and unit set by the user, by plot key (persisted) */
+  signalScales:     Record<string, SignalScale>;
   windowSec:        number;
+  setSignalScale:   (key: string, scale: SignalScale | null) => void;
   toggleSignal:     (key: string) => void;
   setWindowSec:     (s: number) => void;
   clearBuffers:     () => void;
@@ -140,7 +190,16 @@ export const usePlotStore = create<PlotStore>((set, get) => ({
   selectedSignals:  [],
   availableSignals: [],
   signalUnits:      {},
+  signalScales:     loadScales(),
   windowSec:        60,
+
+  setSignalScale: (key, scale) => {
+    const signalScales = { ...get().signalScales };
+    if (scale) signalScales[key] = scale;
+    else delete signalScales[key];
+    set({ signalScales });
+    try { localStorage.setItem(SCALES_KEY, JSON.stringify(signalScales)); } catch { /* ignore */ }
+  },
 
   toggleSignal: (key) => {
     const { selectedSignals } = get();

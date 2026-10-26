@@ -340,7 +340,6 @@ const CANOPEN_COLUMNS: ColumnDef<FrameRow>[] = [
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: 'block',
-            maxWidth: 190,
           }}
           title={detail}
         >
@@ -451,10 +450,16 @@ export function MessageTable() {
           {table.getHeaderGroups().map((hg) => (
             <div key={hg.id} style={styles.headerRow}>
               <div style={{ ...styles.headerCell, width: EXPAND_WIDTH, flexShrink: 0 }} />
-              {hg.headers.slice(1).map((header) => (
+              {hg.headers.slice(1).map((header, i, all) => (
                 <div
                   key={header.id}
-                  style={{ ...styles.headerCell, width: header.getSize(), flexShrink: 0 }}
+                  style={{
+                    ...styles.headerCell,
+                    width: header.getSize(),
+                    flexShrink: 0,
+                    // The last column takes the rest of the row
+                    flexGrow: i === all.length - 1 ? 1 : 0,
+                  }}
                 >
                   {flexRender(header.column.columnDef.header, header.getContext())}
                   <div
@@ -510,6 +515,7 @@ export function MessageTable() {
               const frame = row.original;
               const isExpanded = expandedRows.has(frame.id);
               const hasSignals = (frame.decodedSignals?.length ?? 0) > 0;
+              const cells = row.getVisibleCells().slice(1);
 
               return (
                 <div
@@ -542,54 +548,55 @@ export function MessageTable() {
                     )}
                   </div>
 
-                  {/* Data cells */}
-                  {row.getVisibleCells().slice(1).map((cell) => (
-                    <div
-                      key={cell.id}
-                      style={{ ...styles.cell, width: cell.column.getSize() }}
-                    >
+                  {/* Data cells -- the last one takes the rest of the row and holds the badges */}
+                  {cells.map((cell, i) => i < cells.length - 1 ? (
+                    <div key={cell.id} style={{ ...styles.cell, width: cell.column.getSize() }}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </div>
+                  ) : (
+                    <div key={cell.id} style={{ ...styles.lastCell, width: cell.column.getSize() }}>
+                      <div style={styles.lastCellContent}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </div>
+                      <div style={styles.badgeArea}>
+                        {frame.j1939?.is_bam_cm && (
+                          <span className="badge badge-blue" title="BAM Connection Management">BAM CM</span>
+                        )}
+                        {frame.j1939?.is_bam_dt && (
+                          <span className="badge badge-muted" title="BAM Data Transfer">BAM DT</span>
+                        )}
+                        {frame.j1939?.dm1_faults && frame.j1939.dm1_faults.length > 0 && (
+                          <span className="badge badge-red" title="Active Diagnostic Trouble Codes">
+                            DM1 ({frame.j1939.dm1_faults.length})
+                          </span>
+                        )}
+                        {frame.canopen?.frame_type === 'EMCY' && (
+                          <span className="badge badge-red" title={frame.canopen.emcy?.error_name ?? 'Emergency'}>
+                            EMCY
+                          </span>
+                        )}
+                        {frame.canopen?.sdo_transaction && (
+                          <span
+                            className="badge badge-green"
+                            title={frame.canopen.sdo_transaction.object_name ?? 'SDO paired'}
+                          >
+                            SDO
+                          </span>
+                        )}
+                        {/* EXT badge: only for extended-ID frames that are not J1939 or CANopen */}
+                        {frame.isExtended && !frame.j1939 && !frame.canopen && (
+                          <span className="badge badge-muted">EXT</span>
+                        )}
+                        {frame.isRemote && (
+                          <span className="badge badge-amber" title="Remote transmission request">RTR</span>
+                        )}
+                        {frame.isFd && <span className="badge badge-blue">FD</span>}
+                        {showDecoded && frame.decodedSignals?.length ? (
+                          <span className="badge badge-green">DBC</span>
+                        ) : null}
+                      </div>
+                    </div>
                   ))}
-
-                  {/* Badges */}
-                  <div style={styles.badgeArea}>
-                    {frame.j1939?.is_bam_cm && (
-                      <span className="badge badge-blue" title="BAM Connection Management">BAM CM</span>
-                    )}
-                    {frame.j1939?.is_bam_dt && (
-                      <span className="badge badge-muted" title="BAM Data Transfer">BAM DT</span>
-                    )}
-                    {frame.j1939?.dm1_faults && frame.j1939.dm1_faults.length > 0 && (
-                      <span className="badge badge-red" title="Active Diagnostic Trouble Codes">
-                        DM1 ({frame.j1939.dm1_faults.length})
-                      </span>
-                    )}
-                    {frame.canopen?.frame_type === 'EMCY' && (
-                      <span className="badge badge-red" title={frame.canopen.emcy?.error_name ?? 'Emergency'}>
-                        EMCY
-                      </span>
-                    )}
-                    {frame.canopen?.sdo_transaction && (
-                      <span
-                        className="badge badge-green"
-                        title={frame.canopen.sdo_transaction.object_name ?? 'SDO paired'}
-                      >
-                        SDO
-                      </span>
-                    )}
-                    {/* EXT badge: only for extended-ID frames that are not J1939 or CANopen */}
-                    {frame.isExtended && !frame.j1939 && !frame.canopen && (
-                      <span className="badge badge-muted">EXT</span>
-                    )}
-                    {frame.isRemote && (
-                      <span className="badge badge-amber" title="Remote transmission request">RTR</span>
-                    )}
-                    {frame.isFd && <span className="badge badge-blue">FD</span>}
-                    {showDecoded && frame.decodedSignals?.length ? (
-                      <span className="badge badge-green">DBC</span>
-                    ) : null}
-                  </div>
                 </div>
               );
             })}
@@ -672,10 +679,24 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'transform 150ms ease',
     display: 'inline-block',
   },
-  badgeArea: {
-    flex: 1,
+  lastCell: {
+    flex: '1 0 auto',
     display: 'flex',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 8,
+    minWidth: 0,
+  },
+  lastCellContent: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+    textOverflow: 'ellipsis',
+  },
+  badgeArea: {
+    display: 'flex',
+    flexShrink: 0,
     gap: 4,
     paddingRight: 10,
   },
@@ -708,7 +729,6 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     display: 'block',
-    maxWidth: 174,
   },
   saCell: {
     display: 'flex',

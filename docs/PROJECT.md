@@ -16,13 +16,15 @@ CANdamar is a local CAN bus analyzer: live message table, DBC decoding, signal p
 - `gh` CLI is not installed; GitHub is used through the web UI.
 - Browser pane testing: while the pane is hidden, ResizeObserver / requestAnimationFrame do not fire (plots and virtual lists may look empty).
 - WebView2 fails to start (E_INVALIDARG) when the user-data path is about 260 characters; test with a short `CANDAMAR_DATA_DIR`.
-- CI (GitHub Actions, `.github/workflows/`): `ci.yml` — backend ruff + pytest on Python 3.10–3.12, frontend tsc + eslint + build; `windows-exe.yml` — builds `CANdamar.exe` on `v*` tags (and by hand), smoke-tests it and attaches it to the GitHub Release.
+- CI (GitHub Actions, `.github/workflows/`), runs on every push to any branch and on PRs to `main`: `ci.yml` — backend ruff + pytest on Python 3.10–3.12, frontend tsc + eslint + build; `windows-exe.yml` — builds `CANdamar.exe` and the `candamar` wheel (with the UI), smoke-tests the exe and uploads both as the `CANdamar-windows` artifact (14 days). On a `v*` tag it also checks the tag against `backend/pyproject.toml`, takes the release notes from the matching `## vX.Y.Z` section of `docs/CHANGELOG.md` and publishes the GitHub Release with the exe and the wheel.
+- Release flow: work on a branch → PR into `main` (CI green) → bump `version` in `backend/pyproject.toml` and add the `## vX.Y.Z` CHANGELOG section → tag `vX.Y.Z` on `main` and push the tag (ask the user first).
 - Hardware bench: the user's STM32F072 slcan adapter (own firmware, standard slcan: `L` listen-only, `F`, `N`, `Z`, `M`/`m`), BLDC drive as CANopen node 13 at 500 kbit/s, EDS at `C:\Users\msmca\Documents\STM32\015_BLDC_FOC_RTOS_MotorDrive\canopen\od\bldc_drive.eds` (0x2000 Vdc mV u16, 0x2001 speed rpm i16, 0x2010 speed ref i32, 0x2011 command u8). The drive has no TPDO yet.
 - An older copy of the project remains at `C:\Users\msmca\projects\canviz` (left after the folder rename); do not use it.
 
 ## Decisions & constraints
 <!-- Newest first. "YYYY-MM-DD · Decision: … · Why: …" or "YYYY-MM-DD · Constraint: … · Learned from: …".
 Mark replaced entries "(superseded by YYYY-MM-DD)" instead of deleting them. -->
+- 2026-10-26 · Decision: CI and the exe build run on every branch push; release notes come from `docs/CHANGELOG.md` and the release also ships a wheel · Why: same flow as the user's firmware repo; branch builds give a testable exe before merging.
 - 2026-10-25 · Decision: renamed the product to CANdamar but kept the Python module `canviz` · Why: upstream sync and PRs stay easy.
 - 2026-10-24 · Decision: ruff rules pinned to `E4, E7, E9, F` · Why: newer ruff releases widen the default rule set and would fail CI (ruff is not pinned).
 - 2026-10-24 · Decision: one commit per feature; upstream PRs are cherry-picked from `upstream/main` after the user's hardware test · Why: the fork may stay separate if upstream declines.

@@ -1,16 +1,25 @@
 name: Windows exe
 
-# Builds dist/CANdamar.exe (one file, WebView2 window) and attaches it to the
-# GitHub release when a version tag is pushed. Run it by hand from the
-# Actions tab to get the exe as a downloadable artifact.
+# Builds dist/CANdamar.exe (one file, WebView2 window) and the candamar wheel
+# on every push and uploads them as a downloadable artifact. On a version tag
+# (v*) it also publishes the GitHub release: the notes come from the matching
+# "## vX.Y.Z" section of docs/CHANGELOG.md, and the tag must match the
+# version in backend/pyproject.toml.
 
 on:
   push:
+    branches: ["**"]
     tags: ["v*"]
   workflow_dispatch:
 
+# A newer push to the same branch cancels the run that is still going;
+# tag (release) runs are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 permissions:
-  contents: write   # needed to attach the exe to the release
+  contents: write   # needed to publish the release
 
 jobs:
   build:
@@ -19,6 +28,33 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check tag against package version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          version=$(tr -d '\r' < backend/pyproject.toml | sed -n 's/^version *= *"\(.*\)"/\1/p')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match backend/pyproject.toml version $version"
+            exit 1
+          fi
+
+      - name: Release notes from CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          # Lines after "## <tag> ..." up to the next "## " heading, without the --- rulers
+          # (the Windows checkout has CRLF line endings, so strip the CR first)
+          awk -v tag="$GITHUB_REF_NAME" '
+            { sub(/\r$/, "") }
+            /^## / { if (found) exit; if ($2 == tag) { found = 1; next } }
+            found && !/^---$/ { print }
+          ' docs/CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "::error::docs/CHANGELOG.md has no '## $GITHUB_REF_NAME' section"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/release-notes.md"
 
       - uses: actions/setup-python@v5
         with:
@@ -56,13 +92,28 @@ jobs:
             Get-Process CANdamar -ErrorAction SilentlyContinue | Stop-Process -Force
           }
 
+      # The exe build has already written the frontend into backend/canviz/static,
+      # so the wheel carries the UI and installs without Node.js.
+      - name: Build wheel
+        shell: bash
+        run: |
+          python -m pip wheel ./backend --no-deps -w dist
+          python -m zipfile -l dist/candamar-*.whl | grep -q 'canviz/static/index.html' \
+            || { echo "::error::The wheel does not contain the frontend"; exit 1; }
+
       - uses: actions/upload-artifact@v4
         with:
           name: CANdamar-windows
-          path: dist/CANdamar.exe
+          path: |
+            dist/CANdamar.exe
+            dist/candamar-*.whl
+          retention-days: 14
 
-      - name: Attach to release
+      - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/CANdamar.exe
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: |
+            dist/CANdamar.exe
+            dist/candamar-*.whl

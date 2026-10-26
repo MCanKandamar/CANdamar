@@ -14,12 +14,12 @@ Task: Password reset · branch: feature/reset · started: 2026-10-25
 _No active task._
 
 ## Next
-1. CI/CD review: compare with stm32g4-foc-motor-drive (CI on every branch, exe artifact on every push, release notes from CHANGELOG, PR flow into main), apply what the user approves
-2. CANdamar 0.5.0 (plan agreed 2026-10-26; moves to Now when started)
-3. After the user's hardware test (2026-10-27): prepare upstream CANviz PR branches cherry-picked from `upstream/main`
+1. CANdamar 0.5.0 (plan agreed 2026-10-26; moves to Now when started)
+2. After the user's hardware test (2026-10-27): prepare upstream CANviz PR branches cherry-picked from `upstream/main`
 
 ## Done
 <!-- Newest first, one line each, with evidence label and commit if any. -->
+- 2026-10-26 CI/CD: CI + exe build on every branch push, wheel in the artifact and release, release notes from CHANGELOG, tag/version check — verified locally: YAML parses, version check and notes extraction on CRLF copies (v0.4.0 ok, v0.5.0 rejected), `pip wheel` contains the UI; unverified on GitHub (not pushed)
 - 2026-10-26 agent-lite installed (AGENTS.md, CLAUDE.md, docs/WORK.md, docs/PROJECT.md)
 
 ## Dead ends

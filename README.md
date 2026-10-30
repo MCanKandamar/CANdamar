@@ -12,7 +12,7 @@ pull requests.
 
 ![CANdamar demo](docs/demo.gif)
 
-*(Demo recorded with the original CANviz layout.)*
+*(Demo recorded with CANdamar on an STM32 slcan adapter.)*
 
 CAN bus tools are either expensive, locked to proprietary hardware, or require compiling
 from source. CANdamar runs locally, needs no account and no internet connection, and works
